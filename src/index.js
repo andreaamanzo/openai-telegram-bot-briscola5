@@ -1,7 +1,7 @@
 const OpenAI = require("openai")
 const { Telegraf } = require("telegraf")
 const { message } = require("telegraf/filters")
-const {checkAlias, userFromAlias, randomAlias, formatAliases, ranking, pointsOfAlias, mapGameResults, getAllAliasesOfAlias } = require("./components.js")
+const {checkAlias, getUserFromAlias, getRandomAliasOfUserFromUserID, formatAliases, getRanking, mapGameResults, getAllAliasesOfAlias } = require("./components.js")
 
 const configs = require("./configs")
 const utils = require("./utils")
@@ -9,7 +9,10 @@ const utils = require("./utils")
 /* ===================== SETUP ===================== */
 
 const data = utils.loadData()
-setInterval(() => utils.saveData(data), 5000)
+setInterval(() => utils.saveData(data), 1000)
+const getChatData = (chatID) => {
+    return data.find(chat => chat.chatID == chatID)
+}
 
 const bot = new Telegraf(configs.TELEGRAM_BOT_TOKEN)
 const openai = new OpenAI({
@@ -21,7 +24,7 @@ const openai = new OpenAI({
 bot.start(async (ctx) => {
     const chatID = ctx.chat.id
     if (data.find(chat => chat.chatID == ctx.chat.id)) {
-        await ctx.reply(`Chat already created, chat id: ${chatID}`)
+        await ctx.reply(`La chat è già avviata`)
     } else {
         const newChat = {
             chatID,
@@ -29,76 +32,70 @@ bot.start(async (ctx) => {
             games : [],
         }
         data.push(newChat)
-        await ctx.reply(`New chat created, chat id: ${chatID}`)
+        await ctx.reply(`Nuova chat avviavta con successo!`)
     }
 })
 
-bot.command('createUser', async (ctx) => {
+bot.command('createuser', async (ctx) => {
     const chatID = ctx.chat.id
     let [, alias] = (ctx.message.text).split(' ')
     if (!alias) {
-        await ctx.reply(`Deve essere fornito un nome`)
+        await ctx.reply(`Deve essere fornito un nome per creare un nuovo utente`)
     } else if (checkAlias(alias, chatID)) {
-        await ctx.reply(`this alias already exists`)
+        await ctx.reply(`Impossibile scegliere "${alias}" come nome perché è già l'alias di qualcun altro`)
     } else {
         const userID = Date.now()
         const newUser = {
             userID,
             aliases : [alias],
         }
-        const chat = data.find(chat => chat.chatID == ctx.chat.id)
-        chat.users.push(newUser)
-        await ctx.reply(`your name: ${alias}`)
+        const users = data.find(chat => chat.chatID == ctx.chat.id).users
+        users.push(newUser)
+        await ctx.reply(`Ciao ${alias}, benvenuto in questa chat!`)
+        console.log(users)
     }
 })
 
 bot.command('users', async (ctx) => {
-    const aliasArr = [] //array finale
     const chatID = ctx.chat.id
-    const chat = data.find(chat => chat.chatID == chatID)
-    
-    chat.users.map(user => {
-        const randomIndex = Math.floor(Math.random() * user.aliases.length)
-        aliasArr.push(user.aliases[randomIndex])
-        }
-    ).filter(alias => alias !== null)
-
-    strAliases = formatAliases(aliasArr) //formattazione print
-    await ctx.reply(strAliases)
+    const users = getChatData(chatID).users
+    const aliasesArray = [] 
+    users.forEach(user => aliasesArray.push(getRandomAliasOfUserFromUserID(user.userID, chatID)))
+    const aliasesString = formatAliases(aliasesArray) 
+    await ctx.reply(aliasesString)
         
 })
 
-bot.command('addAlias', async (ctx) =>  {
+bot.command('addalias', async (ctx) =>  {
     const chatID = ctx.chat.id
-    const chat = data.find(chat => chat.chatID == chatID)
     let [, alias, newAlias] = (ctx.message.text).split(' ')
-    if (!checkAlias(alias, chatID)) {
-        await ctx.reply("Questo utente non esiste")
+    if (!alias || !newAlias) {
+        await ctx.reply(`Devono essere forniti un alias e un nuovo alias da aggiungere`)
+    }else if (!checkAlias(alias, chatID)) {
+        await ctx.reply(`"${alias}" non è l'alias di nessun utente`)
+        await ctx.reply(`Utilizza il comando /createuser per creare un nuovo utente oppure /addalias per aggiungere un nuovo alias a un utente`)
     } else if (checkAlias(newAlias, chatID)) {
-        await ctx.reply("Questo alias esiste già")
+        await ctx.reply(`Impossibile assegnare "${newAlias}" come nuovo alias perché è già l'alias di qualcun altro`)
+        await ctx.reply(`Utilizza il comando /whoisalias per vedere a chi appartiene un certo alias `)
     } else {
-        const userID = userFromAlias(alias, chatID).userID
-        let user = chat.users.find(user => user.userID == userID)
+        const user = getChatData(chatID).users.find(user => user.userID == getUserFromAlias(alias, chatID).userID)
         user.aliases.push(newAlias)
-        await ctx.reply("Alias aggiunto con successo!")
+        await ctx.reply(`"${newAlias}" aggiunto con successo come nuovo alias di "${alias}"`)
     }
 })
 
 
-bot.command('removeAlias', async (ctx) =>  {
+bot.command('removealias', async (ctx) =>  {
     const chatID = ctx.chat.id
-    const chat = data.find(chat => chat.chatID == chatID)
     let [, alias] = (ctx.message.text).split(' ')
-    if (!checkAlias(alias, chatID)) {
-        await ctx.reply("Questo utente non esiste")
+    if (!alias) {
+        await ctx.reply(`Deve essere fornito un alias per poterlo rimuovere`)
+    } else if (!checkAlias(alias, chatID)) {
+        await ctx.reply(`"${alias}" non è l'alias di nessun utente`)
     } else {
-        const userID = userFromAlias(alias, chatID).userID
-        let user = chat.users.find(user => user.userID == userID)
-        console.log(user)
+        const user = getChatData(chatID).users.find(user => user.userID == getUserFromAlias(alias, chatID).userID)
         if (user.aliases.length>1){
-            console.log(alias)
             user.aliases = user.aliases.filter(a => a != alias)
-            console.log(user)
             await ctx.reply("Alias rimosso con successo!")
         } else {
             await ctx.reply("Impossibile rimuovere l'alias perché è l'unico presente")
@@ -108,65 +105,95 @@ bot.command('removeAlias', async (ctx) =>  {
 
 bot.command('game', async (ctx) => {
     const chatID = ctx.chat.id
-    const chat = data.find(chat => chat.chatID == chatID)
     let [, winners, losers] = (ctx.message.text).split('/')
     try {
         winners = winners.split(' ').slice(1, -1)
         losers = losers.split(' ').slice(1)
-        if (winners.length + losers.length != 5) throw new Error('Dati non validi')
+        if (winners.length + losers.length != 5 || winners.length < 1) throw new Error('Dati non validi')
     } catch {
         await ctx.reply('Partita inserita in modo non valido')
         return
     }
+    const userIDs = new Set() // Per verificare duplicati
+    for (const alias of winners.concat(losers)) {
+        const user = getUserFromAlias(alias, chatID) 
+        if (!user) {
+            await ctx.reply(`"${alias}" non è l'alias di nessun utente nella chat.`)
+            return
+        }
+        if (userIDs.has(user.userID)) {
+            await ctx.reply(`Lo stesso utente non può essere presente più volte nella stessa partita`)
+            return
+        }
+        userIDs.add(user.userID)
+    }
     const results = mapGameResults(winners, losers, chatID)
+    if (!results) {
+        await ctx.reply("Errore durante la registrazione dei risultati...")
+        return
+    }
     const gameID = Date.now()
     const newGame = {
         gameID,
         results
     }
-    chat.games.push(newGame)
+    const games = getChatData(chatID).games
+    games.push(newGame)
     await ctx.reply('Partita registrata! Usa /ranking per vedere la classifica aggiornata')
 })
 
 
 bot.command('ranking', async (ctx) => {
-    const chatID = ctx.chat.id;
-    const rank = ranking(chatID); // Ottieni la classifica come array [alias, punti]
+    const chatID = ctx.chat.id
+    const rank = getRanking(chatID)
 
     if (rank.length === 0) {
-        await ctx.reply('Nessun dato disponibile per la classifica.');
-        return;
+        await ctx.reply('Nessun dato disponibile per la classifica.')
+        return
     }
 
-    // Calcola le larghezze massime per ogni colonna
-    const maxAliasLength = Math.max(...rank.map(entry => entry[0].length), 5); // Almeno 'Alias'
-    const maxPointsLength = Math.max(...rank.map(entry => entry[1].toString().length), 5); // Almeno 'Punti'
+    const truncateAlias = (alias, maxLength) => {
+        if (alias.length > maxLength) {
+            return alias.slice(0, maxLength - 1) + '…'
+        }
+        return alias
+    }
 
-    let table = ""; // Intestazione della classifica
-    table += `Posizione | ${'Alias'.padEnd(maxAliasLength)} | Punti\n`;
-    table += `${'═'.repeat(9)} | ${'═'.repeat(maxAliasLength)} | ${''.repeat(maxPointsLength)}\n`;
+    const RANK_LENGTH = 4
+    const ALIAS_LENGTH = 10 
+    const POINTS_LENGTH = 5
+
+    let table = ""
+    table += `Rank | ${'Alias'.padEnd(ALIAS_LENGTH)} | Punti\n`
+    table += `${'-'.repeat(RANK_LENGTH)} | ${'-'.repeat(ALIAS_LENGTH)} | ${'-'.repeat(POINTS_LENGTH)}\n`
 
     rank.forEach((entry, index) => {
-        const position = `${index + 1}°`.padEnd(9);
-        const alias = entry[0].padEnd(maxAliasLength);
-        const points = entry[1].toString().padEnd(maxPointsLength);
-        table += `${position} | ${alias} | ${points}\n`;
-    });
+        const position = `${index + 1}°`.padEnd(RANK_LENGTH)
+        const alias = truncateAlias(entry[0], ALIAS_LENGTH).padEnd(ALIAS_LENGTH)
+        const points = entry[1].toString().padEnd(POINTS_LENGTH)
+        table += `${position} | ${alias} | ${points}\n`
+    })
 
-    // Usa il metodo di formattazione Markdown per inviare il messaggio
-    await ctx.reply('*Classifica attuale:*', { parse_mode: 'MarkdownV2' });
+    await ctx.reply('*Classifica attuale:*', { parse_mode: 'MarkdownV2' })
     await ctx.reply(`\`\`\`\n${table}\n\`\`\``, { parse_mode: 'MarkdownV2' })
 })
 
-bot.command('whoHisAlias', async (ctx) => {
+
+bot.command('whoisalias', async (ctx) => {
+    const chatID = ctx.chat.id
     let [, alias] = (ctx.message.text).split(' ')
-    const chatID = ctx.chat.id;
-    const aliases = getAllAliasesOfAlias(alias, chatID)
-    let aliasesString = "*Aliases:*\n"
-    aliases.forEach(alias => {
-        aliasesString += (alias + "\n")
-    })
-    await ctx.reply(aliasesString, { parse_mode: 'MarkdownV2' });
+    if (!alias) {
+        await ctx.reply(`Deve essere fornito un alias per fare la ricerca`)
+    } else if (!checkAlias(alias, chatID)) {
+        await ctx.reply(`"${alias}" non è l'alias di nessun utente`)
+    } else {
+        const aliases = getAllAliasesOfAlias(alias, chatID)
+        let aliasesString = `*Alias di "${alias}" :*\n`
+        aliases.forEach(alias => {
+            aliasesString += ("\\- " + alias + "\n")
+        })
+        await ctx.reply(aliasesString, { parse_mode: 'MarkdownV2' })
+    }
 })
 
 
@@ -175,39 +202,20 @@ bot.command('help', async (ctx) => {
 Benvenuto! Ecco la lista dei comandi disponibili:
 
 /start - Inizializza una nuova chat o riconosce una chat esistente
-/createUser [alias] - Crea un nuovo utente con l'alias specificato
-/addAlias [alias] [nuovoAlias] - Aggiunge un nuovo alias all'utente esistente
-/removeAlias [alias] - Rimuove un alias esistente (se l'utente ne ha più di uno)
+/createuser [alias] - Crea un nuovo utente con l'alias specificato
+/addalias [alias] [nuovoAlias] - Aggiunge un nuovo alias all'utente esistente
+/removealias [alias] - Rimuove un alias esistente (se l'utente ne ha più di uno)
 /users - Mostra una lista casuale di alias degli utenti
 /game [vincitori]/[perdenti] - Registra una partita indicando i vincitori e i perdenti (chi ha chimato deve essere il primo del suo gruppo)
 /ranking - Mostra la classifica aggiornata della chat
-/whoHisAlias [alias] - Mostra tutti gli alias associati a un alias specifico
+/whoisalias [alias] - Mostra tutti gli alias associati a un alias specifico
 /help - Mostra questo messaggio di aiuto
 
     `;
-    await ctx.reply(helpMessage);
-});
+    await ctx.reply(helpMessage)
+})
 
 /* ===================== LAUNCH ===================== */
-
-// bot.telegram.setMyCommands([
-//     { command: 'start', description: 'Inizializza una nuova chat o riconosce una chat esistente' },
-//     { command: 'createuser', description: 'Crea un nuovo utente con un alias specificato' },
-//     { command: 'addalias', description: 'Aggiunge un nuovo alias all\'utente esistente' },
-//     { command: 'removealias', description: 'Rimuove un alias esistente (se l\'utente ne ha più di uno)' },
-//     { command: 'users', description: 'Mostra una lista casuale di alias degli utenti' },
-//     { command: 'game', description: 'Registra una partita indicando i vincitori e i perdenti' },
-//     { command: 'ranking', description: 'Mostra la classifica aggiornata della chat' },
-//     { command: 'whohisalias', description: 'Mostra tutti gli alias associati a un alias specifico' },
-//     { command: 'help', description: 'Mostra questo messaggio di aiuto' },
-// ]).then(() => {
-//     console.log("Comandi impostati con successo");
-// }).catch((err) => {
-//     console.error("Errore impostando i comandi", err);
-// });
-
-
-
 
 
 bot.launch(() => {
