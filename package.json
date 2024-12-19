@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "dotenv": "^16.4.7",
+    "lodash": "^4.17.21",
     "openai": "^4.77.0",
     "telegraf": "^4.16.3"
   }

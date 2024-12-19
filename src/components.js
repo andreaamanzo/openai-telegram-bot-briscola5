@@ -1,4 +1,6 @@
 const utils = require("./utils")
+const lodash = require('lodash')
+
 
 const getChatData = (chatID) => {
     const data = utils.loadData()
@@ -44,70 +46,115 @@ const getRanking = (chatID) => {
     const result = []
     users.forEach( user => {
         const randomAlias = getRandomAliasOfUserFromUserID(user.userID, chatID)
+        // da sistemare
         const points = getPointsOfUserFromUserID(user.userID, chatID)
+        //----------
         result.push([randomAlias, points])
     })
     const sortedResult = result.sort((a, b) => b[1] - a[1])
     return sortedResult
 }
 
-
 const getAllAliasesOfAlias = (alias, chatID) => {
     const user = getUserFromAlias(alias, chatID)
     return user.aliases
 }
 
-
-const formatAliases = (arr) => {
-    if (arr.length === 1) return `- ${arr[0]}`
-    else {
-      let strAlias = ""
-      for (let i = 0; i < arr.length; i++) {
-        strAlias += `- ${arr[i]}\n`
-      }
-      return strAlias
+const validateGame = (winners, loosers, chatID) => {
+    const validationObj = {
+        validation : false,
+        errMessage : null,
+        winners: null,
+        loosers: null
     }
-}
-
-const mapGameResults = (winners, losers, chatID) => {
-    winners = winners.map(alias => getUserFromAlias(alias, chatID).userID)
-    losers = losers.map(alias => getUserFromAlias(alias, chatID).userID)
-    if (winners.length==1){
-        return {[winners[0]]:4, [losers[0]]:-1, [losers[1]]:-1, [losers[2]]:-1, [losers[3]]:-1}
-    }else if (winners.length == 2){
-        return {[winners[0]]:2, [winners[1]]:1, [losers[0]]:-1, [losers[1]]:-1, [losers[2]]:-1}
-    }else if (winners.length == 3){
-        return {[winners[0]]:1, [winners[1]]:1, [winners[2]]:1, [losers[0]]:-2, [losers[1]]:-1}
-    }else if (winners.length == 4){
-        return {[winners[0]]:1, [winners[0]]:1, [winners[1]]:1, [winners[2]]:1, [losers[3]]:-4}
+    try {
+        winners = winners.split(' ').slice(1, -1)
+        loosers = loosers.split(' ').slice(1)
+        if (winners.length + loosers.length != 5 || winners.length < 1) throw new Error('Dati non validi')
+    } catch {
+        validationObj.errMessage = 'Partita inserita in modo non valido'
+        return validationObj
     }
-}
-
-const getPointsFromHeadToHead = (alias1, alias2, chatID) => {
-    const user1 = getUserFromAlias(alias1, chatID)
-    const user2 = getUserFromAlias(alias2, chatID)
-    let points1 = 0
-    let points2 = 0
-
-    const chat = getChatData(chatID)
-    chat.games.forEach(game => {
-        if (Object.keys(game.results).includes(user1.userID.toString()) && Object.keys(game.results).includes(user2.userID.toString())) { // ci sono entrambi
-            points1 += game.results[user1.userID]
-            points2 += game.results[user2.userID]
+    const userIDs = new Set() // Per verificare duplicati
+    for (let alias of winners.concat(loosers)) {
+        const user = getUserFromAlias(alias, chatID) 
+        if (!user) {
+            validationObj.errMessage(`"${alias}" non è l'alias di nessun utente nella chat.`)
+            return validationObj
         }
-        })
-    const points = [points1, points2]
-    return points
+        if (userIDs.has(user.userID)) {
+            validationObj.errMessage = 'Lo stesso utente non può essere presente più volte nella stessa partita'
+            return validationObj
+        }
+        userIDs.add(user.userID)
+    }
+    validationObj.validation = true
+    validationObj.winners = winners
+    validationObj.loosers = loosers
+    return validationObj
 }
 
+const getGameFromGameResult = (result, chatID) => {
+    const games = getChatData(chatID).games
+    return games.find(game => lodash.isEqual(result, game))
+}
+
+const mapGameResults = (winners, loosers, chatID) => {
+    console.log(winners)
+    console.log(parseAlias(winners[0]), winners[0].toLowerCase())
+    console.log(getUserFromAlias(parseAlias(winners[0]), chatID))
+    winners = winners.map(alias => getUserFromAlias(parseAlias(alias), chatID).userID)
+    loosers = loosers.map(alias => getUserFromAlias(parseAlias(alias), chatID).userID)
+    console.log(winners)
+    console.log(loosers)
+    if (winners.length==1){
+        return {[winners[0]]:4, [loosers[0]]:-1, [loosers[1]]:-1, [loosers[2]]:-1, [loosers[3]]:-1}
+    }else if (winners.length == 2){
+        return {[winners[0]]:2, [winners[1]]:1, [loosers[0]]:-1, [loosers[1]]:-1, [loosers[2]]:-1}
+    }else if (winners.length == 3){
+        return {[winners[0]]:1, [winners[1]]:1, [winners[2]]:1, [loosers[0]]:-2, [loosers[1]]:-1}
+    }else if (winners.length == 4){
+        return {[winners[0]]:1, [winners[0]]:1, [winners[1]]:1, [winners[2]]:1, [loosers[3]]:-4}
+    }
+}
+
+const parseAlias = (alias) => {
+    return alias.toLowerCase()
+}
+
+const truncateAlias = (alias, maxLength) => {
+    if (alias.length > maxLength) {
+        return alias.slice(0, maxLength - 1) + '…'
+    }
+    return alias
+}
+
+const helpMessage = `
+Benvenuto! Ecco la lista dei comandi disponibili:
+
+/start - Inizializza una nuova chat o riconosce una chat esistente
+/createuser [alias] - Crea un nuovo utente con l'alias specificato
+/addalias [alias] [nuovoAlias] - Aggiunge un nuovo alias all'utente esistente
+/removealias [alias] - Rimuove un alias esistente (se l'utente ne ha più di uno)
+/users - Mostra una lista casuale di alias degli utenti
+/game [vincitori]/[perdenti] - Registra una partita indicando i vincitori e i perdenti (chi ha chimato deve essere il primo del suo gruppo)
+/ranking - Mostra la classifica aggiornata della chat
+/whoisalias [alias] - Mostra tutti gli alias associati a un alias specifico
+/head2head [alias1] [alias2] - Mostra chi è in vantaggio tra due utenti nelle partite in cui hanno giocato entrambi
+/removegame [vincitori]/[perdenti] - Elimina la partita specificata
+/help - Mostra questo messaggio di aiuto
+`
 
 module.exports = {
+    helpMessage,
     checkAlias,
-    getUserFromAlias,
+    getAllAliasesOfAlias,
+    getGameFromGameResult,    
     getRandomAliasOfUserFromUserID,
-    formatAliases,
-    getPointsOfUserFromUserID,
     getRanking,
+    getUserFromAlias,
     mapGameResults,
-    getAllAliasesOfAlias
+    parseAlias,
+    truncateAlias,
+    validateGame
 }
