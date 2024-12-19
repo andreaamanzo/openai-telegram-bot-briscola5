@@ -1,19 +1,20 @@
-const utils = require("./utils")
+const {loadData, saveData} = require("./utils")
 const {
     checkAlias,
     getAllAliasesOfAlias,
     getGameFromGameResult,
     getRanking,
     getUserFromAlias,
+    getPointsOfUserFromUserID,
+    getRandomAliasOfUserFromUserID,
     mapGameResults,
     parseAlias,
     truncateAlias,
-    validateGame, 
-    getRandomAliasOfUserFromUserID
-} = require("./components.js")
+    validateGame
+} = require("./components")
 
-const data = utils.loadData()
-setInterval(() => utils.saveData(data), 1000)
+const data = loadData()
+setInterval(() => saveData(data), 1000)
 
 const getChatData = (chatID) => {
     return data.find(chat => chat.chatID == chatID)
@@ -114,15 +115,11 @@ const removealias = (alias, chatID) => {
 const whoisalias = (alias, chatID) => {
     const obj = {status : undefined, aliases : null, errMessage : null }
     if (!alias) {
-        obj.status = false
-        obj.aliases = null
         obj.errMessage = `Deve essere fornito un alias per fare la ricerca`
         return obj
     }
     alias = parseAlias(alias)
     if (!checkAlias(alias, chatID)) {
-        obj.status = false
-        obj.aliases = null
         obj.errMessage = `"${alias}" non è l'alias di nessun utente`
         return obj
     } 
@@ -133,7 +130,6 @@ const whoisalias = (alias, chatID) => {
     })
     obj.status = true
     obj.aliases = aliasesString
-    obj.errMessage = `"${alias}" non è l'alias di nessun utente`
     return obj
 }
 
@@ -155,7 +151,7 @@ const game = (winners, loosers, chatID) => {
     const validationObj = validateGame(winners, loosers, chatID)
     const obj = {validation : false, game : null, errMessage : null}
     if (!validationObj.validation) {
-        errMessage = validationObj.errMessage
+        obj.errMessage = validationObj.errMessage
         return obj
     }
     winners = validationObj.winners
@@ -182,17 +178,20 @@ const removegame = (winners, loosers, chatID) => {
         obj.errMessage=validationObj.errMessage
         return obj
     }
+    winners = validationObj.winners
+    loosers = validationObj.loosers
     const results = mapGameResults(winners, loosers, chatID)
-    const game = getGameFromGameResult(results)
+    let game = getGameFromGameResult(results, chatID)
     if (!game) {
         obj.validation=false
         obj.game=null
         obj.errMessage=`Partita non trovata, impossibile rimuoverla`
         return obj
     }
-    const games = getChatData(chatID).games
+    let games = getChatData(chatID).games
     const gameID = game.gameID
-    games = games.filter(game => game != gameID)
+    games = games.filter(g => g.gameID != gameID)
+    getChatData(chatID).games = games
     obj.validation=true
     obj.game=game
     obj.errMessage=null
@@ -240,7 +239,7 @@ const head2head = (alias1, alias2, chatID) => {
     let points1 = 0
     let points2 = 0
     let counter = 0
-
+    
     const chat = getChatData(chatID)
     chat.games.forEach(game => {
         if (Object.keys(game.results).includes(user1.userID.toString()) && Object.keys(game.results).includes(user2.userID.toString())) { // ci sono entrambi
@@ -264,7 +263,7 @@ const head2head = (alias1, alias2, chatID) => {
 
 const pointsof = (alias, chatID) => {
     const obj = {validation : false, user : null, points : null, errMessage : null}
-    if (!!checkAlias(alias, chatID)){
+    if (!checkAlias(alias, chatID)){
         obj.errMessage = `"${alias}" non è un utente di questa chat`
         return obj
     }

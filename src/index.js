@@ -1,8 +1,8 @@
 const OpenAI = require("openai")
-const configs = require("./configs")
+const configs = require("./configs.js")
 const { Telegraf } = require("telegraf")
 const { message } = require("telegraf/filters")
-const { helpMessage } = require("./components")
+const { helpMessage } = require("./components.js")
 const { addalias,
         createchat,
         createuser,
@@ -15,6 +15,11 @@ const { addalias,
         pointsof,
         head2head
       } = require("./botComponents.js")
+      
+
+
+const { completionWithFunctions } = require("./functions")
+const {loadData} = require("./utils.js")
 
 
 /* ===================== SETUP ===================== */
@@ -80,6 +85,14 @@ bot.command('removealias', async (ctx) =>  {
 bot.command('game', async (ctx) => {
     const chatID = ctx.chat.id
     let [, winners, loosers] = (ctx.message.text).split('/')
+    try {
+        winners = winners.split(' ').slice(1, -1)
+        loosers = loosers.split(' ').slice(1)
+        if (winners.length + loosers.length != 5 || winners.length < 1) throw new Error('Dati non validi')
+    } catch {
+        await ctx.reply('Partita inserita in modo non valido')
+        return 
+    }
     const gameObj = game(winners, loosers, chatID)
     if (!gameObj.validation) {
         await ctx.reply(gameObj.errMessage)
@@ -92,6 +105,14 @@ bot.command('game', async (ctx) => {
 bot.command('removegame', async (ctx) => {
     const chatID = ctx.chat.id
     let [, winners, loosers] = (ctx.message.text).split('/')
+    try {
+        winners = winners.split(' ').slice(1, -1)
+        loosers = loosers.split(' ').slice(1)
+        if (winners.length + loosers.length != 5 || winners.length < 1) throw new Error('Dati non validi')
+    } catch {
+        await ctx.reply('Partita inserita in modo non valido')
+        return 
+    }
     const removeGameObj = removegame(winners, loosers, chatID)
     if (!removeGameObj.validation) {
         await ctx.reply(removeGameObj.errMessage)
@@ -124,11 +145,10 @@ bot.command('head2head', async (ctx) => {
     const chatID = ctx.chat.id
     let [, ALIAS1, ALIAS2] = (ctx.message.text).split(' ')
     const {validation, points1, points2, alias1, alias2, counter, errMessage} = head2head(ALIAS1, ALIAS2, chatID)
-    if (validation) {
+    if (!validation) {
         await ctx.reply(errMessage)
         return
     }
-
     if (counter == 0){
         await ctx.reply(`"${alias1}" e "${alias2}" non hanno mai giocato nella stessa partita`)
     } else if (points1 == points2) {
@@ -145,7 +165,7 @@ bot.command('pointsof', async(ctx) => {
     if (!pointsOfObj.validation) {
         await ctx.reply(pointsOfObj.errMessage)
     } else {
-        await ctx.reply(`${alias} ha totalizzato ${pointsOfObj.points} ${pointsOfObj.points == 1 ? "punto" : "punti"} `)
+        await ctx.reply(`"${alias}" ha totalizzato ${pointsOfObj.points} ${pointsOfObj.points == 1 ? "punto" : "punti"} `)
     }
 })
 
@@ -153,23 +173,25 @@ bot.command('help', async (ctx) => {
     await ctx.reply(helpMessage)
 })
 
-bot.on('text', (ctx) => {
+bot.use(async (ctx) => {
     const botUsername = ctx.botInfo.username
     const messageText = ctx.message.text
     const chatID = ctx.chat.id
 
     if (messageText.includes(`@${botUsername}`)) {
-        const cleanMessage = messageText.replace(`@${botUsername}`, '').trim()
-        completionWithFunctions(openai, Messages, Models, gpt-3.5-turbo, prompt)
+        let cleanMessage = `chatID é ${chatID} \n`
+        cleanMessage += messageText.replace(`@${botUsername}`, '').trim()
+        let messages = [
+            {
+                role: "user",
+                content: `chatID è ${chatID} e questa è la lista degli utenti e dei games: ${JSON.stringify(loadData())}`
+            }
+        ]
+    
+        const finalMessage = await completionWithFunctions({openai, messages, model:`gpt-3.5-turbo`, prompt:cleanMessage})
+        ctx.reply(finalMessage) 
     }
 })
-
-
-
-
-
-
-
 
 
 /* ===================== LAUNCH ===================== */

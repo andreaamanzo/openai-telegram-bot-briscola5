@@ -67,19 +67,12 @@ const validateGame = (winners, loosers, chatID) => {
         winners: null,
         loosers: null
     }
-    try {
-        winners = winners.split(' ').slice(1, -1)
-        loosers = loosers.split(' ').slice(1)
-        if (winners.length + loosers.length != 5 || winners.length < 1) throw new Error('Dati non validi')
-    } catch {
-        validationObj.errMessage = 'Partita inserita in modo non valido'
-        return validationObj
-    }
+    
     const userIDs = new Set() // Per verificare duplicati
     for (let alias of winners.concat(loosers)) {
         const user = getUserFromAlias(alias, chatID) 
         if (!user) {
-            validationObj.errMessage(`"${alias}" non è l'alias di nessun utente nella chat.`)
+            validationObj.errMessage = `"${alias}" non è l'alias di nessun utente nella chat.`
             return validationObj
         }
         if (userIDs.has(user.userID)) {
@@ -96,17 +89,12 @@ const validateGame = (winners, loosers, chatID) => {
 
 const getGameFromGameResult = (result, chatID) => {
     const games = getChatData(chatID).games
-    return games.find(game => lodash.isEqual(result, game))
+    return games.find(game => lodash.isEqual(result, game.results))
 }
 
 const mapGameResults = (winners, loosers, chatID) => {
-    console.log(winners)
-    console.log(parseAlias(winners[0]), winners[0].toLowerCase())
-    console.log(getUserFromAlias(parseAlias(winners[0]), chatID))
     winners = winners.map(alias => getUserFromAlias(parseAlias(alias), chatID).userID)
     loosers = loosers.map(alias => getUserFromAlias(parseAlias(alias), chatID).userID)
-    console.log(winners)
-    console.log(loosers)
     if (winners.length==1){
         return {[winners[0]]:4, [loosers[0]]:-1, [loosers[1]]:-1, [loosers[2]]:-1, [loosers[3]]:-1}
     }else if (winners.length == 2){
@@ -156,5 +144,6 @@ module.exports = {
     mapGameResults,
     parseAlias,
     truncateAlias,
-    validateGame
+    validateGame,
+    getPointsOfUserFromUserID
 }
