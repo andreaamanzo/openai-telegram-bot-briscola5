@@ -198,6 +198,19 @@ const removegame = (winners, loosers, chatID) => {
     return obj
 }
 
+const undo = (chatID) => {
+    const obj = {validation : false, game : null, errMessage : null}
+    const games = getChatData(chatID).games
+    if (games.length == 0) {
+        obj.errMessage = 'Nessuna partita presente. Usa il comando /game per registrare una partita'
+        return obj
+    }
+    const lastGame = getChatData(chatID).games.pop()
+    obj.validation = true
+    obj.game = lastGame
+    return obj
+}
+
 const ranking = (chatID) => {
     let rankingString = ""
     const rank = getRanking(chatID)
@@ -285,6 +298,7 @@ module.exports = {
     ranking,
     removealias,
     removegame,
+    undo,
     users,
     whoisalias
 }

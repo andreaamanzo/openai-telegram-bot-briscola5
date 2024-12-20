@@ -1,6 +1,6 @@
 const OpenAI = require("openai")
 const configs = require("./configs.js")
-const { Telegraf } = require("telegraf")
+const { Telegraf, Markup } = require("telegraf")
 const { message } = require("telegraf/filters")
 const { helpMessage } = require("./components.js")
 const { addalias,
@@ -13,7 +13,8 @@ const { addalias,
         removegame, 
         whoisalias,
         pointsof,
-        head2head
+        head2head,
+        undo
       } = require("./botComponents.js")
       
 
@@ -37,7 +38,7 @@ bot.start(async (ctx) => {
     const chatID = ctx.chat.id
     const chatObj = createchat(chatID)
     if (chatObj.validation) {
-        await ctx.reply(`Nuova chat avviavta con successo!`)
+        await ctx.reply(`Nuova chat avviata con successo!`)
     } else {
         await ctx.reply(chatObj.errMessage)
     }
@@ -120,6 +121,35 @@ bot.command('removegame', async (ctx) => {
         await ctx.reply('Partita rimossa con successo')
     }
 })
+
+bot.command('undo', async (ctx) => {
+    ctx.reply(
+        `Sei sicuro di voler eliminare l'ultima partita?`,
+        Markup.inlineKeyboard([
+            [
+                Markup.button.callback('Conferma', 'CONFIRM_UNDO'),
+                Markup.button.callback('Annulla', 'CANCEL_UNDO')
+            ]
+        ])
+    )
+    
+})
+bot.action('CONFIRM_UNDO', (ctx) => {
+    const chatID = ctx.chat.id
+
+    ctx.answerCbQuery()
+    const undoObj = undo(chatID)
+    if (!undoObj.validation) {
+        ctx.reply(undoObj.errMessage)
+    } else {
+        ctx.reply('Partita eliminata con successo!')
+    }
+})
+
+bot.action('CANCEL_UNDO', (ctx) => {
+    ctx.answerCbQuery()
+    ctx.reply('Operazione annullata.')
+});
 
 bot.command('ranking', async (ctx) => {
     const chatID = ctx.chat.id

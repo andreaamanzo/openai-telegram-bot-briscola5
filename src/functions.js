@@ -351,7 +351,40 @@ const functions = [{
             const gameObj = removegame(winners, loosers, chatID)
             return gameObj
         }
-    }
+    },{
+        definition: {
+            name: "undo",
+            description:`
+            elimina l'ultima partita giocata, chiede
+            `,
+            parameters: {
+                type: "object",
+                properties: {
+                    winners: {
+                        type: "array",
+                        items: {type: "string"}
+                    },
+                    loosers: {
+                        type: "array",
+                        items: {type: "string"}
+                    },
+                    chatID: {
+                        type: "string"
+                    }
+                    }
+                },
+            }
+        ,
+        handler: (options) => {
+            const {
+                winners,
+                loosers,
+                chatID
+            } = options
+            const gameObj = removegame(winners, loosers, chatID)
+            return gameObj
+        }
+    },
 ]
 
 module.exports = {

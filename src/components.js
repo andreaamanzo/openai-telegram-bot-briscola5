@@ -110,6 +110,27 @@ const parseAlias = (alias) => {
     return alias.toLowerCase()
 }
 
+// const getGames = (chatID, gameID) => {
+//     const finalGamesArray = []
+//     const games = getChatData(chatID).games //array
+//     for (let [key, value] of  Object.entries(games.results)){
+
+//         const alias = getRandomAliasOfUserFromUserID(key)
+//         finalGamesArray.push({
+//             alias,
+//             points : value
+//         })
+       
+//     }
+    
+//     finalGamesArray.push
+//     }
+    
+
+    
+    
+    
+
 const truncateAlias = (alias, maxLength) => {
     if (alias.length > maxLength) {
         return alias.slice(0, maxLength - 1) + '…'
