@@ -1,8 +1,7 @@
 const OpenAI = require("openai")
 const configs = require("./configs.js")
 const { Telegraf, Markup } = require("telegraf")
-const { message } = require("telegraf/filters")
-const { helpMessage } = require("./components.js")
+const { helpMessage, truncateAlias, checkChat } = require("./components.js")
 const { addalias,
         createchat,
         createuser,
@@ -20,7 +19,7 @@ const { addalias,
 
 
 const { completionWithFunctions } = require("./functions")
-const {loadData} = require("./utils.js")
+const { loadData } = require("./utils.js")
 
 
 /* ===================== SETUP ===================== */
@@ -33,7 +32,6 @@ const openai = new OpenAI({
 
 /* ===================== BOT ===================== */
 
-
 bot.start(async (ctx) => {
     const chatID = ctx.chat.id
     const chatObj = createchat(chatID)
@@ -41,6 +39,16 @@ bot.start(async (ctx) => {
         await ctx.reply(`Nuova chat avviata con successo!`)
     } else {
         await ctx.reply(chatObj.errMessage)
+    }
+})
+
+bot.use(async (ctx, next) => {
+    const chatID = ctx.chat.id
+    const validation = checkChat(chatID)
+    if (validation) {
+        return next();
+    } else {
+        await ctx.reply("È necessario avviare il bot con il comando /start prima di poterlo usare")
     }
 })
 
@@ -57,8 +65,17 @@ bot.command('createuser', async (ctx) => {
 
 bot.command('users', async (ctx) => {
     const chatID = ctx.chat.id
-    const aliasesString = users(chatID) 
-    await ctx.reply(aliasesString)
+    const usersObj = users(chatID)
+    if (usersObj.validation) {
+        let usersString = ""
+        usersObj.users.forEach(alias => {
+            usersString += `- ${truncateAlias(alias, 15)}\n`
+        })
+        await ctx.reply('*Elenco degli utenti:*', { parse_mode: 'MarkdownV2' })
+        await ctx.reply(usersString)
+    } else {
+        await ctx.reply(usersObj.errMessage)
+    }
 })
 
 bot.command('addalias', async (ctx) =>  {
@@ -134,6 +151,7 @@ bot.command('undo', async (ctx) => {
     )
     
 })
+
 bot.action('CONFIRM_UNDO', (ctx) => {
     const chatID = ctx.chat.id
 
@@ -149,7 +167,7 @@ bot.action('CONFIRM_UNDO', (ctx) => {
 bot.action('CANCEL_UNDO', (ctx) => {
     ctx.answerCbQuery()
     ctx.reply('Operazione annullata.')
-});
+})
 
 bot.command('ranking', async (ctx) => {
     const chatID = ctx.chat.id
@@ -167,7 +185,11 @@ bot.command('whoisalias', async (ctx) => {
     if (!whoIsAliasObj.status){
         await ctx.reply(whoIsAliasObj.errMessage)
     }else{
-        await ctx.reply(whoIsAliasObj.aliases, { parse_mode: 'MarkdownV2' })
+        let aliasesString = `*Alias di "${alias}" :*\n`
+        whoIsAliasObj.aliases.forEach(alias => {
+            aliasesString += ("\\- " + alias + "\n")
+        })
+        await ctx.reply(aliasesString, { parse_mode: 'MarkdownV2' })
     }
 })
 
@@ -209,12 +231,11 @@ bot.use(async (ctx) => {
     const chatID = ctx.chat.id
 
     if (messageText.includes(`@${botUsername}`)) {
-        let cleanMessage = `chatID é ${chatID} \n`
-        cleanMessage += messageText.replace(`@${botUsername}`, '').trim()
+        let cleanMessage = messageText.replace(`@${botUsername}`, '').trim()
         let messages = [
             {
                 role: "user",
-                content: `chatID è ${chatID} e questa è la lista degli utenti e dei games: ${JSON.stringify(loadData())}`
+                content: `chatID è ${chatID} e questa è la lista degli utenti e dei games: ${JSON.stringify(loadData().find(chat => chat.chatID == chatID))}`
             }
         ]
     

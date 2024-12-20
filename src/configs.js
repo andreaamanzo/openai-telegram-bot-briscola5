@@ -3,7 +3,7 @@ require("dotenv/config")
 const {
     OPENAI_API_KEY,
     TELEGRAM_BOT_TOKEN,
-    DATA_PATH = "data2.json"
+    DATA_PATH = "data.json"
 } = process.env
 
 if (!OPENAI_API_KEY) {

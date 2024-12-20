@@ -7,6 +7,10 @@ const getChatData = (chatID) => {
     return data.find(chat => chat.chatID == chatID)
 }
 
+function checkChat(chatID) {
+    return !!getChatData(chatID)
+}
+
 const checkAlias = (alias, chatID) => {
     const chat = getChatData(chatID)
     return !!(chat?.users.find(user => user.aliases.includes(alias)))
@@ -157,6 +161,7 @@ Benvenuto! Ecco la lista dei comandi disponibili:
 module.exports = {
     helpMessage,
     checkAlias,
+    checkChat,
     getAllAliasesOfAlias,
     getGameFromGameResult,    
     getRandomAliasOfUserFromUserID,

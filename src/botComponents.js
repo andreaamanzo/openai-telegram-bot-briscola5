@@ -39,28 +39,24 @@ const createchat = (chatID) => {
 }
 
 const createuser = (alias, chatID) => {
-    const obj = {status : undefined, user : undefined, errMessage : undefined}
+    const obj = {validation : false, user : undefined, errMessage : undefined}
     if (!alias) {
-        obj.status = false
-        obj.user = null
         obj.errMessage = `Deve essere fornito un nome per creare un nuovo utente`
         return obj
     }
     alias = parseAlias(alias)
     if (checkAlias(alias, chatID)) {
-        obj.status = false
-        obj.user = null
         obj.errMessage = `Impossibile scegliere "${alias}" come nome perché è già l'alias di qualcun altro`
         return obj
     }
-    const userID = Date.now()
+    const userID = parseInt(Date.now().toString() + (Math.floor(Math.random() * 900) + 100).toString())
     const newUser = {
         userID,
         aliases : [alias],
     }
     const users = getChatData(chatID).users
     users.push(newUser)
-    obj.status = true
+    obj.validation = true
     obj.user = newUser
     return obj
 }
@@ -80,7 +76,7 @@ const addalias = (alias, newAlias, chatID) => {
     newAlias = parseAlias(newAlias)
     if (checkAlias(newAlias, chatID)) {
         obj.errMessage = `Impossibile assegnare "${newAlias}" come nuovo alias perché è già l'alias di qualcun altro
-        Utilizza il comando /whoisalias per vedere a chi appartiene un certo alias `
+        Utilizza il comando /whoisalias per vedere a chi appartiene un certo alias`
         return obj
     } 
     const user = getChatData(chatID).users.find(user => user.userID == getUserFromAlias(alias, chatID).userID)
@@ -113,7 +109,7 @@ const removealias = (alias, chatID) => {
 }
 
 const whoisalias = (alias, chatID) => {
-    const obj = {status : undefined, aliases : null, errMessage : null }
+    const obj = {validation : false, aliases : null, errMessage : null }
     if (!alias) {
         obj.errMessage = `Deve essere fornito un alias per fare la ricerca`
         return obj
@@ -124,27 +120,23 @@ const whoisalias = (alias, chatID) => {
         return obj
     } 
     const aliases = getAllAliasesOfAlias(alias, chatID)
-    let aliasesString = `*Alias di "${alias}" :*\n`
-    aliases.forEach(alias => {
-        aliasesString += ("\\- " + alias + "\n")
-    })
-    obj.status = true
-    obj.aliases = aliasesString
+    obj.validation = true
+    obj.aliases = aliases
     return obj
 }
 
 const users = (chatID) => {
+    const obj = {validation : false, users : null, errMessage : null}
     const users = getChatData(chatID).users
+    if (users.length === 0) {
+        obj.errMessage = "Nessun utente presente. Usa il comando /createuser per aggiungere un nuovo giocatore"
+        return obj
+    }
     const aliasesArray = [] 
     users.forEach(user => aliasesArray.push(getRandomAliasOfUserFromUserID(user.userID, chatID)))
-    if (aliasesArray.length === 1) return `- ${arr[0]}`
-    else {
-        let strAlias = ""
-        for (let i = 0; i < aliasesArray.length; i++) {
-            strAlias += `- ${truncateAlias(aliasesArray[i], 15)}\n`
-        }
-        return strAlias
-    }
+    obj.users = aliasesArray
+    obj.validation = true
+    return obj
 }
 
 const game = (winners, loosers, chatID) => {

@@ -97,39 +97,36 @@ const functions = [{
             alias,
             chatID,
         } = options
-        const userObj = createuser(alias, chatID) //aggiungi i due parametri
+        const userObj = createuser(alias, chatID)
+        console.log("qua") //aggiungi i due parametri
         return userObj
     }
 }, {
     definition: {
         name: "users",
-        description: `Stampa l'elenco degli utenti partecipanti mostrando uno dei suoi alias`,
-    },
-    parameters: {
-        type: "object",
-        properties: {
-            chatID: {
-                type: "string"
-            }
-        }
+        description: `Dato un chatID, stampa l'elenco degli utenti nella chat con il chatID passato, mostrando uno dei suoi alias.`,
+        parameters: {
+            type: "object",
+            properties: {
+                chatID: {
+                    type: "string",
+                },
+            },
+        },
     },
     handler: (options) => {
         const {
             chatID
         } = options
-        const usersStr = users(chatID)
-        //const { n } = options
-        return usersStr
+        const usersObj = users(chatID)
+        return usersObj
     }
 }, {
     definition: {
         name: "addalias",
-        description: /*`Date una stringa rappresentante un alias (soprannome di un utente) di un utente e una seconda stringa rappresentante
-        un nuovo alias di quell'utente, aggiunge il nuovo alias all'elenco degli aliases dell'utente stesso.
-        Se specificati pìù aliases, richiamati per tutti gli aliases scritti`,*/
-        `la funzione accetta una stringa che rappresenta un alias(il soprannome di un utente) e almeno un'altra stringa
-         che rappresenta un nuovo alias di quell'utente. la funzione non può registrare più stringhe come nuovo alias
-          quindi devi chiamare più volte la funzione una volta per ogni nuovo alias`,
+        description: `la funzione accetta una stringa che rappresenta un alias(il soprannome di un utente) e almeno un'altra stringa
+        che rappresenta un nuovo alias di quell'utente. la funzione non può registrare più stringhe come nuovo alias
+        quindi devi chiamare più volte la funzione una volta per ogni nuovo alias`,
         parameters: {
             type: "object",
             properties: {
@@ -222,8 +219,8 @@ const functions = [{
             alias,
             chatID
         } = options
-        const aliasesStr = whoisalias(alias, chatID).aliases
-        return aliasesStr
+        const aliasesObj = whoisalias(alias, chatID)
+        return aliasesObj
     }
 }, {
     definition: {
