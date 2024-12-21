@@ -18,7 +18,7 @@ const { addalias,
       
 
 
-const { completionWithFunctions } = require("./functions")
+const { completionWithFunctions, functions } = require("./functions")
 const { loadData } = require("./utils.js")
 
 
@@ -46,17 +46,19 @@ bot.use(async (ctx, next) => {
     const chatID = ctx.chat.id
     const validation = checkChat(chatID)
     if (validation) {
-        return next();
+        return next()
     } else {
         await ctx.reply("È necessario avviare il bot con il comando /start prima di poterlo usare")
     }
 })
 
+
+
 bot.command('createuser', async (ctx) => {
     const chatID = ctx.chat.id
     let [, alias] = (ctx.message.text).split(' ')
     const createUserObj = createuser(alias, chatID)
-    if (createUserObj.status) {
+    if (createUserObj.validation) {
         ctx.reply(`Ciao ${createUserObj.user.aliases[0]}, benvenuto in questa chat!`)
     } else {
         ctx.reply(createUserObj.errMessage)
@@ -81,7 +83,7 @@ bot.command('users', async (ctx) => {
 bot.command('addalias', async (ctx) =>  {
     const chatID = ctx.chat.id
     let [, alias, newAlias] = (ctx.message.text).split(' ')
-    const addAliasObj = addalias(alias, newAlias, chatID);
+    const addAliasObj = addalias(alias, newAlias, chatID)
     if (addAliasObj.validation) {
         await ctx.reply(`"${newAlias}" aggiunto con successo come nuovo alias di "${alias}"`)
     } else {
@@ -118,7 +120,6 @@ bot.command('game', async (ctx) => {
         await ctx.reply('Partita registrata! Usa /ranking per vedere la classifica aggiornata')
     }
 })
-
 
 bot.command('removegame', async (ctx) => {
     const chatID = ctx.chat.id
@@ -171,8 +172,28 @@ bot.action('CANCEL_UNDO', (ctx) => {
 
 bot.command('ranking', async (ctx) => {
     const chatID = ctx.chat.id
-    const rankingString = ranking(chatID)
+    const rankingObj = ranking(chatID)
+    if (!rankingObj.validation) {
+        await ctx.reply(rankingObj.errMessage)
+        return
+    }
+    const rankingList = rankingObj.ranking
+    const RANK_LENGTH = 4
+    const ALIAS_LENGTH = 10 
+    const POINTS_LENGTH = 5
+    
+    let rankingString = ""
+    rankingString += `Rank | ${'Alias'.padEnd(ALIAS_LENGTH)} | Punti\n`
+    rankingString += `${'-'.repeat(RANK_LENGTH)} | ${'-'.repeat(ALIAS_LENGTH)} | ${'-'.repeat(POINTS_LENGTH)}\n`
 
+    rankingList.forEach((entry, index) => {
+        const position = `${index + 1}°`.padEnd(RANK_LENGTH)
+        const alias = truncateAlias(entry[0], ALIAS_LENGTH).padEnd(ALIAS_LENGTH)
+        const points = entry[1].toString().padEnd(POINTS_LENGTH)
+        rankingString += `${position} | ${alias} | ${points}\n`
+    })
+
+    rankingString = `\`\`\`\n${rankingString}\n\`\`\``
     await ctx.reply('*Classifica attuale:*', { parse_mode: 'MarkdownV2' })
     await ctx.reply(rankingString, { parse_mode: 'MarkdownV2' })
 })
@@ -182,7 +203,7 @@ bot.command('whoisalias', async (ctx) => {
     const chatID = ctx.chat.id
     let [, alias] = (ctx.message.text).split(' ')
     const whoIsAliasObj = whoisalias(alias, chatID)
-    if (!whoIsAliasObj.status){
+    if (!whoIsAliasObj.validation){
         await ctx.reply(whoIsAliasObj.errMessage)
     }else{
         let aliasesString = `*Alias di "${alias}" :*\n`
@@ -195,25 +216,23 @@ bot.command('whoisalias', async (ctx) => {
 
 bot.command('head2head', async (ctx) => {
     const chatID = ctx.chat.id
-    let [, ALIAS1, ALIAS2] = (ctx.message.text).split(' ')
-    const {validation, points1, points2, alias1, alias2, counter, errMessage} = head2head(ALIAS1, ALIAS2, chatID)
+    let [, alias1, alias2] = (ctx.message.text).split(' ')
+    const {validation, pointsOfWinner, pointsOfLooser, winner, looser, gamesCounter, errMessage} = head2head(alias1, alias2, chatID)
     if (!validation) {
         await ctx.reply(errMessage)
         return
     }
-    if (counter == 0){
-        await ctx.reply(`"${alias1}" e "${alias2}" non hanno mai giocato nella stessa partita`)
-    } else if (points1 == points2) {
-        await ctx.reply(`"${alias1}" e "${alias2}" sono entrambi a ${points1} ${points1 == 1 ? "punto" : "punti"} dopo ${counter} ${counter == 1 ? "partita giocata" : " partite giocate"} insieme`)
+    if (pointsOfWinner == pointsOfLooser) {
+        await ctx.reply(`"${winner}" e "${looser}" sono entrambi a ${pointsOfWinner} ${pointsOfWinner == 1 ? "punto" : "punti"} dopo ${gamesCounter} ${gamesCounter == 1 ? "partita giocata" : " partite giocate"} insieme`)
     } else {
-        await ctx.reply(`"${alias1}" è in vantaggio rispetto a "${alias2}" con ${points1} ${points1 == 1 ? "punto" : "punti"} contro ${points2} dopo ${counter} ${counter == 1 ? "partita giocata" : " partite giocate"} insieme`)
+        await ctx.reply(`"${winner}" è in vantaggio rispetto a "${looser}" con ${pointsOfWinner} ${pointsOfWinner == 1 ? "punto" : "punti"} contro ${pointsOfLooser} dopo ${gamesCounter} ${gamesCounter == 1 ? "partita giocata" : " partite giocate"} insieme`)
     }
 })
 
 bot.command('pointsof', async(ctx) => {
     const chatID = ctx.chat.id
     let [, alias] = (ctx.message.text).split(' ')
-    const pointsOfObj = pointsof(alias, chatID);
+    const pointsOfObj = pointsof(alias, chatID)
     if (!pointsOfObj.validation) {
         await ctx.reply(pointsOfObj.errMessage)
     } else {
@@ -230,16 +249,49 @@ bot.use(async (ctx) => {
     const messageText = ctx.message.text
     const chatID = ctx.chat.id
 
-    if (messageText.includes(`@${botUsername}`)) {
+    if (messageText.includes(`@${botUsername}`) || chatID > 0) { // nelle chat di gruppo il chatID è negativo
         let cleanMessage = messageText.replace(`@${botUsername}`, '').trim()
         let messages = [
+            { 
+                role: "system",
+                content: `Sei un assistente che dovrà chiamare le funzioni necessarie a svolgere tutte le richieste di un utente, le quali possono essere anche più di una in un solo messaggio.
+                Ciò che dovrai gestire sarà una chat in cui degli utenti si possono registrare (e ognuno di loro potrà essere conosciuto con più alias) e 
+                registreranno qua le loro partite di "Briscola 5". "Briscola 5" è un gioco di carte che si gioca in 5 e le cui regole sono:
+                1. Si gioca con un mazzo italiano di 40 carte.
+                2. Ogni giocatore gioca una carta per turno, e il turno viene vinto dal giocatore che gioca la carta di valore più alto del seme dominante (briscola) o del seme iniziale.
+                3. Prima dell'inizio della partita un giocatore "chiama" un altro giocatore e questi due saranno in squadra insieme.
+                4. Il giocatore che "chiama" potrebbe anche decidere di "chiamarsi in mano", ovvero di chiamare sè stesso: se questo succede il giocatore giocherà da solo contro gli altri quattro giocatori.
+                6. Al termine della partita, una squadrà avrà vinto e una squadra avrà perso.
+                7. Le regole per l'assegnazione dei punti a fine partita sono le seguenti (a seconda dei casi che si possono presentare):
+                    > caso 1: chi chiama vince:
+                        - il giocatore che chiama  +2 punti 
+                        - il giocatore che viene chiamato +1 punto
+                        - chi non viene chiamato -1 punto 
+
+                    > caso 2: chi chiama perde:
+                        - il giocatore che chiama -2 punti
+                        - il giocatore che viene chiamato -1 punto
+                        - chi non viene chiamato +1 punto
+
+                    > caso 3: chi chiama si chiama in mano e vince:
+                        - il giocatore che chiama  +4 punti 
+                        - chi non viene chiamato -1 punto 
+
+                    > caso 4: chi chiama si chiama in mano e perde:
+                        - il giocatore che chiama  -4 punti 
+                        - chi non viene chiamato +1 punto
+
+                8. Il sistema terrà traccia delle vittorie e delle sconfitte dei giocatori per calcolare una classifica generale.
+
+                La tua responsabilità sarà interpretare i comandi dell'utente per gestire la registrazione degli utenti, gli alias, le partite e i risultati, e utilizzare le funzioni appropriate per soddisfare le richieste.`
+            },
             {
                 role: "user",
-                content: `chatID è ${chatID} e questa è la lista degli utenti e dei games: ${JSON.stringify(loadData().find(chat => chat.chatID == chatID))}`
+                content: `L'ID di questa chat è ${chatID} ` //e questa è la lista degli utenti e dei games: ${JSON.stringify(loadData().find(chat => chat.chatID == chatID))}
             }
         ]
     
-        const finalMessage = await completionWithFunctions({openai, messages, model:`gpt-3.5-turbo`, prompt:cleanMessage})
+        const finalMessage = await completionWithFunctions({openai, messages, model:`gpt-3.5-turbo`, prompt:cleanMessage, functions})
         ctx.reply(finalMessage) 
     }
 })

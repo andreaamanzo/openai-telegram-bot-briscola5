@@ -1,5 +1,4 @@
 const { addalias,
-    createchat,
     createuser,
     users,
     game,
@@ -8,7 +7,8 @@ const { addalias,
     removegame, 
     whoisalias,
     pointsof,
-    head2head
+    head2head,
+    undo
   } = require("./botComponents")
 
 
@@ -16,373 +16,381 @@ const completionWithFunctions = async (options) => {
     const {
         openai,
         messages,
-        model = "gpt-4",
-        prompt
-    } = options
+        model = "gpt-3.5-turbo",
+        prompt,
+        functions
+    } = options;
 
     const tools = functions.map(({ definition }) => ({
         type: "function",
         function: definition
-    }))
+    }));
 
     // Add the prompt to the list of messages
     messages.push({
         role: "user",
         content: prompt
-    })
+    });
 
-    const firstCompletion = await openai.chat.completions.create({
+    let firstCompletion = await openai.chat.completions.create({
         model,
         messages,
         tools
-    })
+    });
 
-    const firstMessage = firstCompletion.choices[0].message
-    const { tool_calls } = firstMessage
+    let firstMessage = firstCompletion.choices[0].message;
+    let { tool_calls } = firstMessage;
+    console.log('----------tool calls----------------')
+    console.log(tool_calls)
+    console.log('------------------------------------')
 
     // Add the message to the list of messages
     messages.push(firstMessage)
-    if (tool_calls) {
-        // The assistant has requested one or more tool calls
-        for (const toolCall of tool_calls) {
-            const functionName = toolCall.function.name
-            const functionArguments = JSON.parse(toolCall.function.arguments)
 
-            const targetFunction = functions.find(({ definition }) => definition.name === functionName)
-            if (!targetFunction) {
-                throw new Error(`Function ${functionName} not found`)
+    let secondMessage = firstMessage
+
+    while (true) {
+        if (tool_calls) {
+            // The assistant has requested one or more tool calls
+            for (const toolCall of tool_calls) {
+                const functionName = toolCall.function.name;
+                const functionArguments = JSON.parse(toolCall.function.arguments);
+    
+                const targetFunction = functions.find(({ definition }) => definition.name === functionName);
+                if (!targetFunction) {
+                    throw new Error(`Function ${functionName} not found`);
+                }
+    
+                const functionHandler = await targetFunction.handler;
+    
+                // Handle each call and continue processing the rest
+                const result = functionHandler(functionArguments);
+                console.log('----------result----------------')
+                console.log(result)
+                console.log('------------------------------------')
+    
+                // Add the result to the list of messages
+                messages.push({
+                    role: "tool",
+                    tool_call_id: toolCall.id,
+                    content: JSON.stringify(result)
+                });
+    
             }
+    
+            // next response
+            const secondCompletion = await openai.chat.completions.create({
+                model,
+                messages,
+                tools
+            });
+            
+            secondMessage = secondCompletion.choices[0].message;
 
-            const functionHandler = targetFunction.handler
-            const result = functionHandler(functionArguments)
+            tool_calls = secondMessage.tool_calls;
 
-            // Add the result to the list of messages
-            messages.push({
-                role: "tool",
-                tool_call_id: toolCall.id,
-                content: JSON.stringify(result)
-            })
+            console.log('----------tool calls----------------')
+            console.log(tool_calls)
+            console.log('------------------------------------')
+    
+            messages.push(secondMessage);
+    
+        } else {
+            // The assistant has not requested any tool calls
+            return secondMessage.content;
         }
+
     }
-
-    const secondCompletion = await openai.chat.completions.create({
-        model,
-        messages,
-        tools
-    })
-
-    return secondCompletion.choices[0].message.content
-}
+};
 
 
-const functions = [{
-    definition: {
-        name: "createuser",
-        description: `Data una stringa che rappresenta un nome utente, 
-        aggiunge tale user all'elenco degli utenti che partecipano nella stessa chat, controllando se esiste già`,
-        parameters: {
-            type: "object",
-            properties: {
-                alias: {
-                    type: "string"
-                },
-                chatID: {
-                    type: "string"
-                }
-            },
-        }
-    },
-    handler: (options) => {
-        const {
-            alias,
-            chatID,
-        } = options
-        const userObj = createuser(alias, chatID)
-        console.log("qua") //aggiungi i due parametri
-        return userObj
-    }
-}, {
-    definition: {
-        name: "users",
-        description: `Dato un chatID, stampa l'elenco degli utenti nella chat con il chatID passato, mostrando uno dei suoi alias.`,
-        parameters: {
-            type: "object",
-            properties: {
-                chatID: {
-                    type: "string",
-                },
-            },
-        },
-    },
-    handler: (options) => {
-        const {
-            chatID
-        } = options
-        const usersObj = users(chatID)
-        return usersObj
-    }
-}, {
-    definition: {
-        name: "addalias",
-        description: `la funzione accetta una stringa che rappresenta un alias(il soprannome di un utente) e almeno un'altra stringa
-        che rappresenta un nuovo alias di quell'utente. la funzione non può registrare più stringhe come nuovo alias
-        quindi devi chiamare più volte la funzione una volta per ogni nuovo alias`,
-        parameters: {
-            type: "object",
-            properties: {
-                alias: {
-                    type: "string"
-                },
-                newAlias : {
-                    type: "string"
-                },
-                chatID: {
-                    type: "string"
-                }
-            },
-        }
-    },
-    handler: (options) => {
-        const {
-            alias,
-            newAlias, 
-            chatID
-        } = options
-        const addaliasObj = addalias(alias, newAlias, chatID)
-        return addaliasObj
-    }
-}, {
-    definition: {
-        name: "removealias",
-        description: `Data una stringa rappresentante un alias (soprannome di un utente) di un utente, elimina tale alias
-        dalla lista degli aliases dell'utente`,
-        parameters: {
-            type: "object",
-            properties: {
-                alias: {
-                    type: "string"
-                },
-                chatID: {
-                    type: "string"
-                }
-            },
-        }
-    },
-    handler: (options) => {
-        const {
-            alias,
-            chatID
-        } = options
-        const removealiasObj = removealias(alias, chatID)
-        return removealiasObj
-    }
-}, {
-    definition: {
-        name: "ranking",
-        description: ` La funzione chiamata stampa la classifica della partita in cui 
-        stiamo giocando, mostrando i punti totali di ogni giocatore.
-        Non mostrare mai il chatID`,
-        parameters: {
-            type: "object",
-            properties: {
-                chatID: {
-                    type: "string"
+
+
+
+const functions = [
+    {
+        definition: {
+            name: "createuser",
+            description: "Crea un nuovo utente in una chat specifica utilizzando un alias e restituisce un oggetto con i dettagli dell'utente creato o un messaggio di errore.",
+            parameters: {
+                type: "object",
+                properties: {
+                    alias: {
+                        type: "string",
+                        description: "Alias dell'utente da creare."
+                    },
+                    chatID: {
+                        type: "number",
+                        description: "ID della chat in cui creare l'utente."
+                    }
                 }
             }
         },
-    },
-    handler: (options) => {
-        const {
-            chatID
-        } = options
-        const rankStr = ranking(chatID)
-        return rankStr
-    }
-}, {
-    definition: {
-        name: "whoisalias",
-        description: `Data una stringa rappresentante un alias (soprannome di un utente), stampa tutti gli aliases di quell'utente`,
-        parameters: {
-            type: "object",
-            properties: {
-                alias: {
-                    type: "string"
-                },
-                chatID: {
-                    type: "string"
-                }
-            },
+        handler: (options) => {
+            const { alias, chatID } = options;
+            const userObj = createuser(alias, chatID);
+            return userObj;
         }
     },
-    handler: (options) => {
-        const {
-            alias,
-            chatID
-        } = options
-        const aliasesObj = whoisalias(alias, chatID)
-        return aliasesObj
-    }
-}, {
-    definition: {
-        name: "mypoints",
-        description: `Data una stringa rappresentante un alias (soprannome di un utente), stampa solameente i punti dell'utente
-        collegato a quell'alias`,
-        parameters: {
-            type: "object",
-            properties: {
-                alias: {
-                    type: "string"
-                },
-                chatID: {
-                    type: "string"
+    {
+        definition: {
+            name: "users",
+            description: "Restituisce l'elenco degli utenti di una chat specifica o un messaggio di errore.",
+            parameters: {
+                type: "object",
+                properties: {
+                    chatID: {
+                        type: "number",
+                        description: "ID della chat da cui recuperare l'elenco degli utenti."
+                    }
                 }
-            },
+            }
+        },
+        handler: (options) => {
+            const { chatID } = options;
+            const usersObj = users(chatID);
+            return usersObj;
         }
     },
-    handler: (options) => {
-        const {
-            alias,
-            chatID
-        } = options
-        const pointsStr = pointsof(alias, chatID)
-        return pointsStr
-    }
-}, {
-    definition: {
-        name: "head2head",
-        description: `Date due stringhe rappresentanti due aliases (soprannome di un utente) diversi, stampa chi è in vantaggio
-        tra i due utenti calcolando i punti delle partite in cui hanno giocato entrambi`,
-        parameters: {
-            type: "object",
-            properties: {
-                alias1: {
-                    type: "string"
-                },
-                alias2: {
-                    type: "string"
-                },
-                chatID: {
-                    type: "string"
+    {
+        definition: {
+            name: "addalias",
+            description: "Aggiunge un nuovo alias a un utente esistente e restituisce l'utente aggiornato o un messaggio di errore.",
+            parameters: {
+                type: "object",
+                properties: {
+                    alias: {
+                        type: "string",
+                        description: "Alias esistente dell'utente."
+                    },
+                    newAlias: {
+                        type: "string",
+                        description: "Nuovo alias da aggiungere."
+                    },
+                    chatID: {
+                        type: "number",
+                        description: "ID della chat in cui aggiornare l'alias."
+                    }
                 }
-            },
+            }
+        },
+        handler: (options) => {
+            const { alias, newAlias, chatID } = options;
+            const addaliasObj = addalias(alias, newAlias, chatID);
+            return addaliasObj;
         }
     },
-    handler: (options) => {
-        const {
-            alias1,
-            alias2,
-            chatID
-        } = options
-        const head2headObj = head2head(alias1, alias2, chatID)
-        return head2headObj
-    }
-    }
-    ,{
-    definition: {
-        name: "game",
-        description:`
-        Sono dati due array, uno dei vincitori e uno dei perdenti contenenti uno degli alias dei vincitori 
-        o dei perdenti. Dati questi dati deve 
-        salvare i punteggi della partita sapendo che chi ha chiamato è il primo del suo gruppo, che sarà quello più piccolo.
-        Questa non darà la classifica generale, ma solo quella della partita appena giocata.
-        `,
-        parameters: {
-            type: "object",
-            properties: {
-                winners: {
-                    type: "array",
-                    items: {type: "string"}
-                },
-                loosers: {
-                    type: "array",
-                    items: {type: "string"}
-                },
-                chatID: {
-                    type: "string"
+    {
+        definition: {
+            name: "removealias",
+            description: "Rimuove un alias da un utente e restituisce l'utente aggiornato o un messaggio di errore.",
+            parameters: {
+                type: "object",
+                properties: {
+                    alias: {
+                        type: "string",
+                        description: "Alias da rimuovere."
+                    },
+                    chatID: {
+                        type: "number",
+                        description: "ID della chat in cui rimuovere l'alias."
+                    }
                 }
-                }
-            },
+            }
+        },
+        handler: (options) => {
+            const { alias, chatID } = options;
+            const removealiasObj = removealias(alias, chatID);
+            return removealiasObj;
         }
-    ,
-    handler: (options) => {
-        const {
-            winners,
-            loosers,
-            chatID
-        } = options
-        const gameObj = game(winners, loosers, chatID)
-        return gameObj
-    }
-    },{
+    },
+    {
+        definition: {
+            name: "ranking",
+            description: "Restituisce la classifica attuale di una chat specifica o un messaggio di errore.",
+            parameters: {
+                type: "object",
+                properties: {
+                    chatID: {
+                        type: "number",
+                        description: "ID della chat da cui recuperare la classifica."
+                    }
+                }
+            }
+        },
+        handler: (options) => {
+            const { chatID } = options;
+            const rankStr = ranking(chatID);
+            return rankStr;
+        }
+    },
+    {
+        definition: {
+            name: "whoisalias",
+            description: "Restituisce tutti gli alias di un utente dato un alias esistente o un messaggio di errore.",
+            parameters: {
+                type: "object",
+                properties: {
+                    alias: {
+                        type: "string",
+                        description: "Alias dell'utente di cui recuperare tutti gli alias."
+                    },
+                    chatID: {
+                        type: "number",
+                        description: "ID della chat in cui cercare l'alias."
+                    }
+                }
+            }
+        },
+        handler: (options) => {
+            const { alias, chatID } = options;
+            const aliasesObj = whoisalias(alias, chatID);
+            return aliasesObj;
+        }
+    },
+    {
+        definition: {
+            name: "pointsof",
+            description: "Restituisce i punti attuali di un utente dato un alias o un messaggio di errore.",
+            parameters: {
+                type: "object",
+                properties: {
+                    alias: {
+                        type: "string",
+                        description: "Alias dell'utente di cui recuperare i punti."
+                    },
+                    chatID: {
+                        type: "number",
+                        description: "ID della chat in cui cercare l'alias."
+                    }
+                }
+            }
+        },
+        handler: (options) => {
+            const { alias, chatID } = options;
+            const pointsStr = pointsof(alias, chatID);
+            return pointsStr;
+        }
+    },
+    {
+        definition: {
+            name: "head2head",
+            description: "Confronta due utenti in base ai punti accumulati nelle partite in cui hanno giocato insieme e restituisce il vincitore, il perdente e i punti, o un messaggio di errore.",
+            parameters: {
+                type: "object",
+                properties: {
+                    alias1: {
+                        type: "string",
+                        description: "Alias del primo utente."
+                    },
+                    alias2: {
+                        type: "string",
+                        description: "Alias del secondo utente."
+                    },
+                    chatID: {
+                        type: "number",
+                        description: "ID della chat in cui effettuare il confronto."
+                    }
+                }
+            }
+        },
+        handler: (options) => {
+            const { alias1, alias2, chatID } = options;
+            const head2headObj = head2head(alias1, alias2, chatID);
+            return head2headObj;
+        }
+    },
+    {
+        definition: {
+            name: "game",
+            description: "Registra i risultati di una partita dato un elenco di vincitori e perdenti e aggiorna la classifica, oppure restituisce un messaggio di errore.",
+            parameters: {
+                type: "object",
+                properties: {
+                    winners: {
+                        type: "array",
+                        items: {
+                            type: "string",
+                            description: "Alias dei vincitori."
+                        }
+                    },
+                    loosers: {
+                        type: "array",
+                        items: {
+                            type: "string",
+                            description: "Alias dei perdenti."
+                        }
+                    },
+                    chatID: {
+                        type: "number",
+                        description: "ID della chat in cui registrare la partita."
+                    }
+                }
+            }
+        },
+        handler: (options) => {
+            const { winners, loosers, chatID } = options;
+            const gameObj = game(winners, loosers, chatID);
+            return gameObj;
+        }
+    },
+    {
         definition: {
             name: "removegame",
-            description:`
-            data la descrizione di un game ( due array, uno dei vincitori e uno dei perdenti contenenti uno degli alias dei vincitori
-            o dei perdenti.) rimuove se esiste la partita giocata corrispondente.
-            Se viene chiesto da eliminare l'ultimo game, allora prendi come array quelli del gameID con posizione [-1].
-            `,
+            description: "Rimuove una partita registrata dato l'elenco di vincitori e perdenti, oppure restituisce un messaggio di errore.",
             parameters: {
                 type: "object",
                 properties: {
                     winners: {
                         type: "array",
-                        items: {type: "string"}
+                        items: {
+                            type: "string",
+                            description: "Alias dei vincitori."
+                        }
                     },
                     loosers: {
                         type: "array",
-                        items: {type: "string"}
+                        items: {
+                            type: "string",
+                            description: "Alias dei perdenti."
+                        }
                     },
                     chatID: {
-                        type: "string"
+                        type: "number",
+                        description: "ID della chat in cui cercare e rimuovere la partita."
                     }
-                    }
-                },
+                }
             }
-        ,
+        },
         handler: (options) => {
-            const {
-                winners,
-                loosers,
-                chatID
-            } = options
-            const gameObj = removegame(winners, loosers, chatID)
-            return gameObj
-        }
-    },{
-        definition: {
-            name: "undo",
-            description:`
-            elimina l'ultima partita giocata, chiede
-            `,
-            parameters: {
-                type: "object",
-                properties: {
-                    winners: {
-                        type: "array",
-                        items: {type: "string"}
-                    },
-                    loosers: {
-                        type: "array",
-                        items: {type: "string"}
-                    },
-                    chatID: {
-                        type: "string"
-                    }
-                    }
-                },
-            }
-        ,
-        handler: (options) => {
-            const {
-                winners,
-                loosers,
-                chatID
-            } = options
-            const gameObj = removegame(winners, loosers, chatID)
-            return gameObj
+            const { winners, loosers, chatID } = options;
+            const gameObj = removegame(winners, loosers, chatID);
+            return gameObj;
         }
     },
-]
+    {
+        definition: {
+            name: "undo",
+            description: "Annulla l'ultima partita registrata nella chat specificata.",
+            parameters: {
+                type: "object",
+                properties: {
+                    chatID: {
+                        type: "number",
+                        description: "ID della chat in cui annullare l'ultima partita."
+                    }
+                }
+            }
+        },
+        handler: (options) => {
+            const { chatID } = options;
+            const undoObj = undo(chatID);
+            return undoObj;
+        }
+    }
+];
+
+
 
 module.exports = {
     functions,

@@ -13,6 +13,7 @@ function checkChat(chatID) {
 
 const checkAlias = (alias, chatID) => {
     const chat = getChatData(chatID)
+    alias = parseAlias(alias)
     return !!(chat?.users.find(user => user.aliases.includes(alias)))
 }
 
@@ -50,9 +51,7 @@ const getRanking = (chatID) => {
     const result = []
     users.forEach( user => {
         const randomAlias = getRandomAliasOfUserFromUserID(user.userID, chatID)
-        // da sistemare
         const points = getPointsOfUserFromUserID(user.userID, chatID)
-        //----------
         result.push([randomAlias, points])
     })
     const sortedResult = result.sort((a, b) => b[1] - a[1])
@@ -149,12 +148,14 @@ Benvenuto! Ecco la lista dei comandi disponibili:
 /createuser [alias] - Crea un nuovo utente con l'alias specificato
 /addalias [alias] [nuovoAlias] - Aggiunge un nuovo alias all'utente esistente
 /removealias [alias] - Rimuove un alias esistente (se l'utente ne ha più di uno)
-/users - Mostra una lista casuale di alias degli utenti
+/users - Mostra la lista degli utenti
 /game [vincitori]/[perdenti] - Registra una partita indicando i vincitori e i perdenti (chi ha chimato deve essere il primo del suo gruppo)
+/removegame [vincitori]/[perdenti] - Elimina la partita specificata
+/undo - Elimina l'ultima partita giocata
 /ranking - Mostra la classifica aggiornata della chat
 /whoisalias [alias] - Mostra tutti gli alias associati a un alias specifico
+/pointsof [alias] - Mostra i punti di un utente
 /head2head [alias1] [alias2] - Mostra chi è in vantaggio tra due utenti nelle partite in cui hanno giocato entrambi
-/removegame [vincitori]/[perdenti] - Elimina la partita specificata
 /help - Mostra questo messaggio di aiuto
 `
 

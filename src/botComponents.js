@@ -9,7 +9,6 @@ const {
     getRandomAliasOfUserFromUserID,
     mapGameResults,
     parseAlias,
-    truncateAlias,
     validateGame
 } = require("./components")
 
@@ -64,19 +63,19 @@ const createuser = (alias, chatID) => {
 const addalias = (alias, newAlias, chatID) => {
     const obj = {validation : false, user : null, errMessage : null}
     if (!alias || !newAlias) {
-        obj.errMessage = `Devono essere forniti un alias e un nuovo alias da aggiungere`
+        obj.errMessage = `Devono essere forniti un utente e un nuovo alias da aggiungergli`
         return obj
     }
     alias = parseAlias(alias)
     if (!checkAlias(alias, chatID)) {
-        obj.errMessage = `"${alias}" non è l'alias di nessun utente
-        Utilizza il comando /createuser per creare un nuovo utente oppure /addalias per aggiungere un nuovo alias a un utente`
+        obj.errMessage = `"${alias}" non è l'alias di nessun utente 
+Utilizza il comando /createuser per creare un nuovo utente oppure /addalias per aggiungere un nuovo alias a un utente`
         return obj
     }
     newAlias = parseAlias(newAlias)
     if (checkAlias(newAlias, chatID)) {
         obj.errMessage = `Impossibile assegnare "${newAlias}" come nuovo alias perché è già l'alias di qualcun altro
-        Utilizza il comando /whoisalias per vedere a chi appartiene un certo alias`
+Utilizza il comando /whoisalias per vedere a chi appartiene un certo alias`
         return obj
     } 
     const user = getChatData(chatID).users.find(user => user.userID == getUserFromAlias(alias, chatID).userID)
@@ -154,8 +153,9 @@ const game = (winners, loosers, chatID) => {
         gameID,
         results
     }
-    const games = getChatData(chatID).games
+    let games = getChatData(chatID).games
     games.push(newGame)
+    getChatData(chatID).games = games
     obj.validation = true
     obj.game = newGame
     return obj
@@ -192,45 +192,40 @@ const removegame = (winners, loosers, chatID) => {
 
 const undo = (chatID) => {
     const obj = {validation : false, game : null, errMessage : null}
-    const games = getChatData(chatID).games
+    let games = getChatData(chatID).games
+    console.log(games)
     if (games.length == 0) {
         obj.errMessage = 'Nessuna partita presente. Usa il comando /game per registrare una partita'
         return obj
     }
-    const lastGame = getChatData(chatID).games.pop()
+    const lastGame = games.pop()
+    getChatData(chatID).games = games
     obj.validation = true
     obj.game = lastGame
     return obj
 }
 
 const ranking = (chatID) => {
-    let rankingString = ""
-    const rank = getRanking(chatID)
+    const obj = {validation : false, rankingList : null, errMessage : null}
+    const rankingList = getRanking(chatID)
 
-    if (rank.length === 0) {
-        rankingString = 'Nessun dato disponibile per la classifica.'
-        return rankingString
+    if (rankingList.length === 0) {
+        obj.errMessage = 'Nessun dato disponibile per la classifica.'
+        return obj
     }
-    const RANK_LENGTH = 4
-    const ALIAS_LENGTH = 10 
-    const POINTS_LENGTH = 5
 
-    rankingString += `Rank | ${'Alias'.padEnd(ALIAS_LENGTH)} | Punti\n`
-    rankingString += `${'-'.repeat(RANK_LENGTH)} | ${'-'.repeat(ALIAS_LENGTH)} | ${'-'.repeat(POINTS_LENGTH)}\n`
-
-    rank.forEach((entry, index) => {
-        const position = `${index + 1}°`.padEnd(RANK_LENGTH)
-        const alias = truncateAlias(entry[0], ALIAS_LENGTH).padEnd(ALIAS_LENGTH)
-        const points = entry[1].toString().padEnd(POINTS_LENGTH)
-        rankingString += `${position} | ${alias} | ${points}\n`
-    })
-
-    rankingString = `\`\`\`\n${rankingString}\n\`\`\``
-    return rankingString
+    obj.ranking = rankingList
+    obj.validation = true
+    
+    return obj
 }
 
 const head2head = (alias1, alias2, chatID) => {
-    const obj = {validation : false, points1 : null, points2 : null, alias1 : null, alias2 : null, counter : null, errMessage : null}
+    const obj = {validation : false, pointsOfWinner : null, pointsOfLooser : null, winner : null, looser : null, gamesCounter : null, errMessage : null}
+    if (!alias1 || !alias2) {
+        obj.errMessage = `Devono essere forniti gli alias di due utenti`
+        return obj
+    }
     const user1 = getUserFromAlias(alias1, chatID)
     const user2 = getUserFromAlias(alias2, chatID)
     if (!user1) {
@@ -241,33 +236,47 @@ const head2head = (alias1, alias2, chatID) => {
         obj.errMessage = `"${alias2}" non è l'alias di nessun utente`
         return obj
     }
+    if (user1.userID === user2.userID) {
+        obj.errMessage = `Gli alias forniti si riferiscono allo stesso utente`
+        return obj
+    }
     let points1 = 0
     let points2 = 0
-    let counter = 0
+    let gamesCounter = 0
     
     const chat = getChatData(chatID)
     chat.games.forEach(game => {
         if (Object.keys(game.results).includes(user1.userID.toString()) && Object.keys(game.results).includes(user2.userID.toString())) { // ci sono entrambi
             points1 += game.results[user1.userID]
             points2 += game.results[user2.userID]
-            counter++
+            gamesCounter++
         }
     }) 
     if (points2 > points1) {
-        [points2, points1] = [points1, points2]
-        [alias2, alias1] = [alias1, alias2]
+        [points1, points2] = [points2, points1];
+        [alias1, alias2] = [alias2, alias1];
     }
+
+    if (gamesCounter === 0) {
+        obj.errMessage = `"${alias1}" e ${alias2} non hanno mai giocato nella stessa partita`
+        return obj
+    }
+
     obj.validation = true
-    obj.points1 = points1
-    obj.points2 = points2
-    obj.alias1 = alias1
-    obj.alias2 = alias2
-    obj.counter = counter
+    obj.pointsOfWinner = points1
+    obj.pointsOfLooser = points2
+    obj.winner = alias1
+    obj.looser = alias2
+    obj.gamesCounter = gamesCounter
     return obj
 }
 
 const pointsof = (alias, chatID) => {
     const obj = {validation : false, user : null, points : null, errMessage : null}
+    if (!alias){
+        obj.errMessage = `Deve essere fornito un utente per poter vedere i suoi punti`
+        return obj
+    }
     if (!checkAlias(alias, chatID)){
         obj.errMessage = `"${alias}" non è un utente di questa chat`
         return obj
