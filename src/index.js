@@ -1,7 +1,7 @@
 const OpenAI = require("openai")
 const configs = require("./configs.js")
 const { Telegraf, Markup } = require("telegraf")
-const { helpMessage, truncateAlias, checkChat } = require("./components.js")
+const { helpMessage, truncateAlias, checkChat, getGames } = require("./components.js")
 const { addalias,
         createchat,
         createuser,
@@ -198,7 +198,6 @@ bot.command('ranking', async (ctx) => {
     await ctx.reply(rankingString, { parse_mode: 'MarkdownV2' })
 })
 
-
 bot.command('whoisalias', async (ctx) => {
     const chatID = ctx.chat.id
     let [, alias] = (ctx.message.text).split(' ')
@@ -244,6 +243,69 @@ bot.command('help', async (ctx) => {
     await ctx.reply(helpMessage)
 })
 
+
+
+const ITEMS_PER_PAGE = 3; // Numero di opzioni per pagina
+
+// Funzione per mostrare un elenco con paginazione
+async function sendPaginatedList(ctx, options, currentPage = 1) {
+    const totalPages = Math.ceil(options.length / ITEMS_PER_PAGE);
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    const optionsToShow = options.slice(startIndex, endIndex);
+
+    // Crea il messaggio con le opzioni
+    let message = `*Pagina ${currentPage} di ${totalPages}*\n\n`;
+    optionsToShow.forEach((option, index) => {
+        message += `*Partita ${startIndex + index + 1}*\n`;
+        for (let [alias, score] of Object.entries(option)) {
+            message += `${alias}: ${score} punti\n`;
+        }
+        message += "\n"
+    });
+
+    // Inline keyboard con i pulsanti per navigare tra le pagine
+    const navigationButtons = [];
+    if (currentPage > 1) {
+        navigationButtons.push(Markup.button.callback('⬅️ Indietro', `PAGE_${currentPage - 1}`));
+    }
+    if (currentPage < totalPages) {
+        navigationButtons.push(Markup.button.callback('Avanti ➡️', `PAGE_${currentPage + 1}`));
+    }
+
+    // Mostra il messaggio con la tastiera
+    if (ctx.update.callback_query) {
+        await ctx.editMessageText(message, {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([navigationButtons]),
+        });
+    } else {
+        await ctx.reply(message, {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([navigationButtons]),
+        });
+    }
+}
+
+// Comando per iniziare a mostrare la lista
+bot.command('gamelog', async (ctx) => {
+    const chatID = ctx.chat.id
+    const options = getGames(chatID)
+    await sendPaginatedList(ctx, options, 1);
+});
+
+// Gestione dei pulsanti di navigazione
+bot.action(/PAGE_(\d+)/, async (ctx) => {
+    const currentPage = parseInt(ctx.match[1]); // Numero di pagina corrente
+    const chatID = ctx.chat.id
+    const options = getGames(chatID) // Esempio di 100 opzioni
+
+    await sendPaginatedList(ctx, options, currentPage);
+    await ctx.answerCbQuery();
+});
+
+
+
 bot.use(async (ctx) => {
     const botUsername = ctx.botInfo.username
     const messageText = ctx.message.text
@@ -254,9 +316,12 @@ bot.use(async (ctx) => {
         let messages = [
             { 
                 role: "system",
-                content: `Sei un assistente che dovrà chiamare le funzioni necessarie a svolgere tutte le richieste di un utente, le quali possono essere anche più di una in un solo messaggio.
+                content: `Sei un assistente che dovrà chiamare le funzioni necessarie a svolgere tutte le richieste di un utente, le quali possono essere anche più di una in un solo messaggio, ma senza rispondere
+                a richieste extra, non esplicitamente descritte nel messaggio dell'utente.
                 Ciò che dovrai gestire sarà una chat in cui degli utenti si possono registrare (e ognuno di loro potrà essere conosciuto con più alias) e 
-                registreranno qua le loro partite di "Briscola 5". "Briscola 5" è un gioco di carte che si gioca in 5 e le cui regole sono:
+                registreranno qua le loro partite di "Briscola 5". Nel momento in cui un utente dice di aver fatto una partita, tale utente deve esistere, in caso contrario
+                dovrai restituire un messaggio di errore.
+                "Briscola 5" è un gioco di carte che si gioca in 5 e le cui regole sono:
                 1. Si gioca con un mazzo italiano di 40 carte.
                 2. Ogni giocatore gioca una carta per turno, e il turno viene vinto dal giocatore che gioca la carta di valore più alto del seme dominante (briscola) o del seme iniziale.
                 3. Prima dell'inizio della partita un giocatore "chiama" un altro giocatore e questi due saranno in squadra insieme.
@@ -281,9 +346,7 @@ bot.use(async (ctx) => {
                         - il giocatore che chiama  -4 punti 
                         - chi non viene chiamato +1 punto
 
-                8. Il sistema terrà traccia delle vittorie e delle sconfitte dei giocatori per calcolare una classifica generale.
-
-                La tua responsabilità sarà interpretare i comandi dell'utente per gestire la registrazione degli utenti, gli alias, le partite e i risultati, e utilizzare le funzioni appropriate per soddisfare le richieste.`
+                8. Il sistema terrà traccia delle vittorie e delle sconfitte dei giocatori per calcolare una classifica generale.`
             },
             {
                 role: "user",

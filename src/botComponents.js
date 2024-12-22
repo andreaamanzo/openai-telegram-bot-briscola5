@@ -9,7 +9,8 @@ const {
     getRandomAliasOfUserFromUserID,
     mapGameResults,
     parseAlias,
-    validateGame
+    validateGame,
+    getGames
 } = require("./components")
 
 const data = loadData()

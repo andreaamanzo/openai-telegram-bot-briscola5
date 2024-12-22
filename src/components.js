@@ -25,8 +25,8 @@ const getUserFromAlias = (alias, chatID) => {
 
 const getUserFromUserID = (userID, chatID) => {
     const chat = getChatData(chatID)
-    const user = chat.users.find(user => user.userID == userID) 
-    return user
+    const finalUser = chat.users.find(user => user.userID == userID) 
+    return finalUser
 }
 
 const getRandomAliasOfUserFromUserID = (userID, chatID) => {
@@ -69,6 +69,10 @@ const validateGame = (winners, loosers, chatID) => {
         errMessage : null,
         winners: null,
         loosers: null
+    }
+    if (!winners || !loosers || winners.length + loosers.length != 5) {
+        validationObj.errMessage = "Partita inserita in modo non valido"
+        return validationObj
     }
     
     const userIDs = new Set() // Per verificare duplicati
@@ -113,26 +117,22 @@ const parseAlias = (alias) => {
     return alias.toLowerCase()
 }
 
-// const getGames = (chatID, gameID) => {
-//     const finalGamesArray = []
-//     const games = getChatData(chatID).games //array
-//     for (let [key, value] of  Object.entries(games.results)){
+const getGames = (chatID) => {
+    const finalGamesArray = []
+    const games = getChatData(chatID).games 
+    console.log(games)
+    games.forEach(game => {
+        const newGame = {}
+        for (let [userID, score] of Object.entries(game.results)){
+            console.log(userID, score)
+            const alias = getRandomAliasOfUserFromUserID(userID, chatID)
+            newGame[alias] = score
+        }
+        finalGamesArray.push(newGame)
+    })
+    return finalGamesArray
+}
 
-//         const alias = getRandomAliasOfUserFromUserID(key)
-//         finalGamesArray.push({
-//             alias,
-//             points : value
-//         })
-       
-//     }
-    
-//     finalGamesArray.push
-//     }
-    
-
-    
-    
-    
 
 const truncateAlias = (alias, maxLength) => {
     if (alias.length > maxLength) {
@@ -172,5 +172,6 @@ module.exports = {
     parseAlias,
     truncateAlias,
     validateGame,
-    getPointsOfUserFromUserID
+    getPointsOfUserFromUserID,
+    getGames
 }
