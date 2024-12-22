@@ -1,7 +1,7 @@
 const OpenAI = require("openai")
 const configs = require("./configs")
 const { Telegraf, Markup } = require("telegraf")
-const { helpMessage, truncateAlias, checkChat, getGames } = require("./components")
+const { helpMessage, truncateAlias, checkChat } = require("./components")
 const { completionWithFunctions, functions, instructionMessage } = require("./functions")
 const { addalias,
         createchat,
