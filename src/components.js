@@ -118,27 +118,28 @@ const parseAlias = (alias) => {
 }
 
 const getGames = (chatID) => {
-    const finalGamesArray = []
     const games = getChatData(chatID).games 
-    console.log(games)
-    games.forEach(game => {
-        const newGame = {}
-        for (let [userID, score] of Object.entries(game.results)){
-            console.log(userID, score)
-            const alias = getRandomAliasOfUserFromUserID(userID, chatID)
-            newGame[alias] = score
-        }
-        finalGamesArray.push(newGame)
-    })
-    return finalGamesArray
+    return games
 }
-
 
 const truncateAlias = (alias, maxLength) => {
     if (alias.length > maxLength) {
         return alias.slice(0, maxLength - 1) + '…'
     }
     return alias
+}
+
+const formatTimestamp = (timestamp) => {
+    const date = new Date(timestamp)
+
+    const day = String(date.getDate()).padStart(2, '0')
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const year = String(date.getFullYear()).slice(2)
+
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+
+    return `${day}/${month}/${year}, ${hours}:${minutes}`
 }
 
 const helpMessage = `
@@ -152,6 +153,7 @@ Benvenuto! Ecco la lista dei comandi disponibili:
 /game [vincitori]/[perdenti] - Registra una partita indicando i vincitori e i perdenti (chi ha chimato deve essere il primo del suo gruppo)
 /removegame [vincitori]/[perdenti] - Elimina la partita specificata
 /undo - Elimina l'ultima partita giocata
+/gamelog - Mostra il registro delle partite
 /ranking - Mostra la classifica aggiornata della chat
 /whoisalias [alias] - Mostra tutti gli alias associati a un alias specifico
 /pointsof [alias] - Mostra i punti di un utente
@@ -173,5 +175,6 @@ module.exports = {
     truncateAlias,
     validateGame,
     getPointsOfUserFromUserID,
-    getGames
+    getGames,
+    formatTimestamp
 }

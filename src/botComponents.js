@@ -139,6 +139,32 @@ const users = (chatID) => {
     return obj
 }
 
+const gamelog = (chatID) => {
+    const obj = {validation : false, games : null, errMessage : null}
+    const games = getGames(chatID)
+    if (games.length === 0) {
+        obj.errMessage = 'Nessuna partita presente, usa il comando /game per registrare una nuova partita!'
+        return obj
+    }
+    const finalGamesArray = []
+    games.forEach(game => {
+        const results = {}
+        for (let [userID, score] of Object.entries(game.results)){
+            const alias = getRandomAliasOfUserFromUserID(userID, chatID)
+            results[alias] = score
+        }
+        const newGame = {
+            timestamp : game.gameID,
+            results
+        }
+        finalGamesArray.push(newGame)
+    })
+
+    obj.games = finalGamesArray
+    obj.validation = true
+    return obj
+}
+
 const game = (winners, loosers, chatID) => {
     const validationObj = validateGame(winners, loosers, chatID)
     const obj = {validation : false, game : null, errMessage : null}
@@ -254,8 +280,8 @@ const head2head = (alias1, alias2, chatID) => {
         }
     }) 
     if (points2 > points1) {
-        [points1, points2] = [points2, points1];
-        [alias1, alias2] = [alias2, alias1];
+        [points1, points2] = [points2, points1]
+        [alias1, alias2] = [alias2, alias1]
     }
 
     if (gamesCounter === 0) {
@@ -302,5 +328,6 @@ module.exports = {
     removegame,
     undo,
     users,
-    whoisalias
+    whoisalias,
+    gamelog
 }

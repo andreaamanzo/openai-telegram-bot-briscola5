@@ -11,6 +11,40 @@ const { addalias,
     undo
   } = require("./botComponents")
 
+const instructionMessage = `
+    Sei un assistente che dovrà chiamare le funzioni necessarie a svolgere tutte le richieste di un utente, 
+    le quali possono essere anche più di una in un solo messaggio, ma non dovrai risponderea a richieste extra, 
+    non esplicitamente descritte nel messaggio dell'utente, soprattutto non creare nuovi utenti se non espressamente indicato.
+    Ciò che dovrai gestire sarà una chat in cui degli utenti si possono registrare (e ognuno di loro potrà essere conosciuto con più alias) e 
+    registreranno qua le loro partite di "Briscola 5".
+    Quando registri una partita NON devi mai creare nuovi utenti.
+    "Briscola 5" è un gioco di carte che si gioca in 5 e le cui regole sono:
+    1. Si gioca con un mazzo italiano di 40 carte.
+    2. Si gioca sempre in 5.
+    3. Prima dell'inizio della partita un giocatore "chiama" un altro giocatore e questi due saranno in squadra insieme (ad esempio "A" ha chiamato "B").
+    4. Il giocatore che "chiama" potrebbe anche decidere di "chiamarsi in mano", ovvero di chiamare sè stesso: se questo succede il giocatore giocherà da solo contro gli altri quattro giocatori.
+    6. Al termine della partita, una squadrà avrà vinto e una squadra avrà perso.
+    7. Le regole per l'assegnazione dei punti a fine partita sono le seguenti (a seconda dei casi che si possono presentare):
+        > caso 1: chi chiama vince:
+            - il giocatore che chiama  +2 punti 
+            - il giocatore che viene chiamato +1 punto
+            - chi non viene chiamato -1 punto 
+
+        > caso 2: chi chiama perde:
+            - il giocatore che chiama -2 punti
+            - il giocatore che viene chiamato -1 punto
+            - chi non viene chiamato +1 punto
+
+        > caso 3: chi chiama si chiama in mano e vince:
+            - il giocatore che chiama  +4 punti 
+            - chi non viene chiamato -1 punto 
+
+        > caso 4: chi chiama si chiama in mano e perde:
+            - il giocatore che chiama  -4 punti 
+            - chi non viene chiamato +1 punto
+
+    8. Il sistema terrà traccia delle vittorie e delle sconfitte dei giocatori per calcolare una classifica generale.`
+
 
 const completionWithFunctions = async (options) => {
     const {
@@ -19,32 +53,31 @@ const completionWithFunctions = async (options) => {
         model = "gpt-3.5-turbo",
         prompt,
         functions
-    } = options;
+    } = options
 
     const tools = functions.map(({ definition }) => ({
         type: "function",
         function: definition
-    }));
+    }))
 
     // Add the prompt to the list of messages
     messages.push({
         role: "user",
         content: prompt
-    });
+    })
 
     let firstCompletion = await openai.chat.completions.create({
         model,
         messages,
         tools
-    });
+    })
 
-    let firstMessage = firstCompletion.choices[0].message;
-    let { tool_calls } = firstMessage;
+    let firstMessage = firstCompletion.choices[0].message
+    let { tool_calls } = firstMessage
     console.log('----------tool calls----------------')
     console.log(tool_calls)
     console.log('------------------------------------')
 
-    // Add the message to the list of messages
     messages.push(firstMessage)
 
     let secondMessage = firstMessage
@@ -53,18 +86,18 @@ const completionWithFunctions = async (options) => {
         if (tool_calls) {
             // The assistant has requested one or more tool calls
             for (const toolCall of tool_calls) {
-                const functionName = toolCall.function.name;
-                const functionArguments = JSON.parse(toolCall.function.arguments);
+                const functionName = toolCall.function.name
+                const functionArguments = JSON.parse(toolCall.function.arguments)
     
-                const targetFunction = functions.find(({ definition }) => definition.name === functionName);
+                const targetFunction = functions.find(({ definition }) => definition.name === functionName)
                 if (!targetFunction) {
-                    throw new Error(`Function ${functionName} not found`);
+                    throw new Error(`Function ${functionName} not found`)
                 }
     
-                const functionHandler = await targetFunction.handler;
+                const functionHandler = await targetFunction.handler
     
                 // Handle each call and continue processing the rest
-                const result = functionHandler(functionArguments);
+                const result = functionHandler(functionArguments)
                 console.log('----------result----------------')
                 console.log(result)
                 console.log('------------------------------------')
@@ -74,7 +107,7 @@ const completionWithFunctions = async (options) => {
                     role: "tool",
                     tool_call_id: toolCall.id,
                     content: JSON.stringify(result)
-                });
+                })
     
             }
     
@@ -83,29 +116,25 @@ const completionWithFunctions = async (options) => {
                 model,
                 messages,
                 tools
-            });
+            })
             
-            secondMessage = secondCompletion.choices[0].message;
+            secondMessage = secondCompletion.choices[0].message
 
-            tool_calls = secondMessage.tool_calls;
+            tool_calls = secondMessage.tool_calls
 
             console.log('----------tool calls----------------')
             console.log(tool_calls)
             console.log('------------------------------------')
     
-            messages.push(secondMessage);
+            messages.push(secondMessage)
     
         } else {
             // The assistant has not requested any tool calls
-            return secondMessage.content;
+            return secondMessage.content
         }
 
     }
-};
-
-
-
-
+}
 
 const functions = [
     {
@@ -127,9 +156,9 @@ const functions = [
             }
         },
         handler: (options) => {
-            const { alias, chatID } = options;
-            const userObj = createuser(alias, chatID);
-            return userObj;
+            const { alias, chatID } = options
+            const userObj = createuser(alias, chatID)
+            return userObj
         }
     },
     {
@@ -147,9 +176,9 @@ const functions = [
             }
         },
         handler: (options) => {
-            const { chatID } = options;
-            const usersObj = users(chatID);
-            return usersObj;
+            const { chatID } = options
+            const usersObj = users(chatID)
+            return usersObj
         }
     },
     {
@@ -175,9 +204,9 @@ const functions = [
             }
         },
         handler: (options) => {
-            const { alias, newAlias, chatID } = options;
-            const addaliasObj = addalias(alias, newAlias, chatID);
-            return addaliasObj;
+            const { alias, newAlias, chatID } = options
+            const addaliasObj = addalias(alias, newAlias, chatID)
+            return addaliasObj
         }
     },
     {
@@ -199,9 +228,9 @@ const functions = [
             }
         },
         handler: (options) => {
-            const { alias, chatID } = options;
-            const removealiasObj = removealias(alias, chatID);
-            return removealiasObj;
+            const { alias, chatID } = options
+            const removealiasObj = removealias(alias, chatID)
+            return removealiasObj
         }
     },
     {
@@ -219,9 +248,9 @@ const functions = [
             }
         },
         handler: (options) => {
-            const { chatID } = options;
-            const rankStr = ranking(chatID);
-            return rankStr;
+            const { chatID } = options
+            const rankStr = ranking(chatID)
+            return rankStr
         }
     },
     {
@@ -243,9 +272,9 @@ const functions = [
             }
         },
         handler: (options) => {
-            const { alias, chatID } = options;
-            const aliasesObj = whoisalias(alias, chatID);
-            return aliasesObj;
+            const { alias, chatID } = options
+            const aliasesObj = whoisalias(alias, chatID)
+            return aliasesObj
         }
     },
     {
@@ -267,9 +296,9 @@ const functions = [
             }
         },
         handler: (options) => {
-            const { alias, chatID } = options;
-            const pointsStr = pointsof(alias, chatID);
-            return pointsStr;
+            const { alias, chatID } = options
+            const pointsStr = pointsof(alias, chatID)
+            return pointsStr
         }
     },
     {
@@ -295,9 +324,9 @@ const functions = [
             }
         },
         handler: (options) => {
-            const { alias1, alias2, chatID } = options;
-            const head2headObj = head2head(alias1, alias2, chatID);
-            return head2headObj;
+            const { alias1, alias2, chatID } = options
+            const head2headObj = head2head(alias1, alias2, chatID)
+            return head2headObj
         }
     },
     {
@@ -329,9 +358,9 @@ const functions = [
             }
         },
         handler: (options) => {
-            const { winners, loosers, chatID } = options;
-            const gameObj = game(winners, loosers, chatID);
-            return gameObj;
+            const { winners, loosers, chatID } = options
+            const gameObj = game(winners, loosers, chatID)
+            return gameObj
         }
     },
     {
@@ -363,9 +392,9 @@ const functions = [
             }
         },
         handler: (options) => {
-            const { winners, loosers, chatID } = options;
-            const gameObj = removegame(winners, loosers, chatID);
-            return gameObj;
+            const { winners, loosers, chatID } = options
+            const gameObj = removegame(winners, loosers, chatID)
+            return gameObj
         }
     },
     {
@@ -383,16 +412,15 @@ const functions = [
             }
         },
         handler: (options) => {
-            const { chatID } = options;
-            const undoObj = undo(chatID);
-            return undoObj;
+            const { chatID } = options
+            const undoObj = undo(chatID)
+            return undoObj
         }
     }
-];
-
-
+]
 
 module.exports = {
     functions,
-    completionWithFunctions
+    completionWithFunctions,
+    instructionMessage
 }

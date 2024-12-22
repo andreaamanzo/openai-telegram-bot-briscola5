@@ -1,7 +1,8 @@
 const OpenAI = require("openai")
-const configs = require("./configs.js")
+const configs = require("./configs")
 const { Telegraf, Markup } = require("telegraf")
-const { helpMessage, truncateAlias, checkChat, getGames } = require("./components.js")
+const { helpMessage, truncateAlias, checkChat, getGames } = require("./components")
+const { completionWithFunctions, functions, instructionMessage } = require("./functions")
 const { addalias,
         createchat,
         createuser,
@@ -13,14 +14,10 @@ const { addalias,
         whoisalias,
         pointsof,
         head2head,
-        undo
-      } = require("./botComponents.js")
-      
-
-
-const { completionWithFunctions, functions } = require("./functions")
-const { loadData } = require("./utils.js")
-
+        undo,
+        gamelog
+      } = require("./botComponents")
+const { sendPaginatedList } = require('./telegrafComponents')
 
 /* ===================== SETUP ===================== */
 
@@ -28,7 +25,6 @@ const bot = new Telegraf(configs.TELEGRAM_BOT_TOKEN)
 const openai = new OpenAI({
     apiKey: configs.OPENAI_API_KEY
 })
-
 
 /* ===================== BOT ===================== */
 
@@ -52,8 +48,6 @@ bot.use(async (ctx, next) => {
     }
 })
 
-
-
 bot.command('createuser', async (ctx) => {
     const chatID = ctx.chat.id
     let [, alias] = (ctx.message.text).split(' ')
@@ -69,12 +63,7 @@ bot.command('users', async (ctx) => {
     const chatID = ctx.chat.id
     const usersObj = users(chatID)
     if (usersObj.validation) {
-        let usersString = ""
-        usersObj.users.forEach(alias => {
-            usersString += `- ${truncateAlias(alias, 15)}\n`
-        })
-        await ctx.reply('*Elenco degli utenti:*', { parse_mode: 'MarkdownV2' })
-        await ctx.reply(usersString)
+        await sendPaginatedList(ctx, usersObj.users, 10, 1, 'users')
     } else {
         await ctx.reply(usersObj.errMessage)
     }
@@ -153,21 +142,23 @@ bot.command('undo', async (ctx) => {
     
 })
 
-bot.action('CONFIRM_UNDO', (ctx) => {
+bot.action('CONFIRM_UNDO', async (ctx) => {
     const chatID = ctx.chat.id
 
-    ctx.answerCbQuery()
+    await ctx.answerCbQuery()
+    await ctx.deleteMessage()
     const undoObj = undo(chatID)
     if (!undoObj.validation) {
-        ctx.reply(undoObj.errMessage)
+        await ctx.reply(undoObj.errMessage)
     } else {
-        ctx.reply('Partita eliminata con successo!')
+        await ctx.reply('Partita eliminata con successo!')
     }
 })
 
-bot.action('CANCEL_UNDO', (ctx) => {
-    ctx.answerCbQuery()
-    ctx.reply('Operazione annullata.')
+bot.action('CANCEL_UNDO', async (ctx) => {
+    await ctx.deleteMessage()
+    await ctx.answerCbQuery()
+    await ctx.reply('Operazione annullata.')
 })
 
 bot.command('ranking', async (ctx) => {
@@ -243,68 +234,39 @@ bot.command('help', async (ctx) => {
     await ctx.reply(helpMessage)
 })
 
-
-
-const ITEMS_PER_PAGE = 3; // Numero di opzioni per pagina
-
-// Funzione per mostrare un elenco con paginazione
-async function sendPaginatedList(ctx, options, currentPage = 1) {
-    const totalPages = Math.ceil(options.length / ITEMS_PER_PAGE);
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    const optionsToShow = options.slice(startIndex, endIndex);
-
-    // Crea il messaggio con le opzioni
-    let message = `*Pagina ${currentPage} di ${totalPages}*\n\n`;
-    optionsToShow.forEach((option, index) => {
-        message += `*Partita ${startIndex + index + 1}*\n`;
-        for (let [alias, score] of Object.entries(option)) {
-            message += `${alias}: ${score} punti\n`;
-        }
-        message += "\n"
-    });
-
-    // Inline keyboard con i pulsanti per navigare tra le pagine
-    const navigationButtons = [];
-    if (currentPage > 1) {
-        navigationButtons.push(Markup.button.callback('⬅️ Indietro', `PAGE_${currentPage - 1}`));
-    }
-    if (currentPage < totalPages) {
-        navigationButtons.push(Markup.button.callback('Avanti ➡️', `PAGE_${currentPage + 1}`));
-    }
-
-    // Mostra il messaggio con la tastiera
-    if (ctx.update.callback_query) {
-        await ctx.editMessageText(message, {
-            parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([navigationButtons]),
-        });
-    } else {
-        await ctx.reply(message, {
-            parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([navigationButtons]),
-        });
-    }
-}
-
-// Comando per iniziare a mostrare la lista
 bot.command('gamelog', async (ctx) => {
     const chatID = ctx.chat.id
-    const options = getGames(chatID)
-    await sendPaginatedList(ctx, options, 1);
-});
+    const gamelogObj = gamelog(chatID)
+    if (!gamelogObj.validation) {
+        await ctx.reply(gamelogObj.errMessage)
+    } else {
+        const options = gamelogObj.games
+        await sendPaginatedList(ctx, options, 3, 1, 'gamelog')
+    }
+})
 
-// Gestione dei pulsanti di navigazione
-bot.action(/PAGE_(\d+)/, async (ctx) => {
-    const currentPage = parseInt(ctx.match[1]); // Numero di pagina corrente
+bot.action(/PAGE_(\w+)_(\d+)/, async (ctx) => {
     const chatID = ctx.chat.id
-    const options = getGames(chatID) // Esempio di 100 opzioni
-
-    await sendPaginatedList(ctx, options, currentPage);
-    await ctx.answerCbQuery();
-});
+    const type = ctx.match[1]
+    const currentPage = parseInt(ctx.match[2])
 
 
+    let options
+    let itemsPerPage
+    if (type === 'gamelog') {
+        options = gamelog(chatID).games
+        itemsPerPage = 3
+    } else if (type === 'users') {
+        options = users(chatID).users
+        itemsPerPage = 10
+    } else {
+        await ctx.answerCbQuery('Opzioni non valide!')
+        return
+    }
+    await sendPaginatedList(ctx, options, itemsPerPage, currentPage, type)
+
+    await ctx.answerCbQuery()
+})
 
 bot.use(async (ctx) => {
     const botUsername = ctx.botInfo.username
@@ -316,52 +278,20 @@ bot.use(async (ctx) => {
         let messages = [
             { 
                 role: "system",
-                content: `Sei un assistente che dovrà chiamare le funzioni necessarie a svolgere tutte le richieste di un utente, le quali possono essere anche più di una in un solo messaggio, ma senza rispondere
-                a richieste extra, non esplicitamente descritte nel messaggio dell'utente.
-                Ciò che dovrai gestire sarà una chat in cui degli utenti si possono registrare (e ognuno di loro potrà essere conosciuto con più alias) e 
-                registreranno qua le loro partite di "Briscola 5". Nel momento in cui un utente dice di aver fatto una partita, tale utente deve esistere, in caso contrario
-                dovrai restituire un messaggio di errore.
-                "Briscola 5" è un gioco di carte che si gioca in 5 e le cui regole sono:
-                1. Si gioca con un mazzo italiano di 40 carte.
-                2. Ogni giocatore gioca una carta per turno, e il turno viene vinto dal giocatore che gioca la carta di valore più alto del seme dominante (briscola) o del seme iniziale.
-                3. Prima dell'inizio della partita un giocatore "chiama" un altro giocatore e questi due saranno in squadra insieme.
-                4. Il giocatore che "chiama" potrebbe anche decidere di "chiamarsi in mano", ovvero di chiamare sè stesso: se questo succede il giocatore giocherà da solo contro gli altri quattro giocatori.
-                6. Al termine della partita, una squadrà avrà vinto e una squadra avrà perso.
-                7. Le regole per l'assegnazione dei punti a fine partita sono le seguenti (a seconda dei casi che si possono presentare):
-                    > caso 1: chi chiama vince:
-                        - il giocatore che chiama  +2 punti 
-                        - il giocatore che viene chiamato +1 punto
-                        - chi non viene chiamato -1 punto 
-
-                    > caso 2: chi chiama perde:
-                        - il giocatore che chiama -2 punti
-                        - il giocatore che viene chiamato -1 punto
-                        - chi non viene chiamato +1 punto
-
-                    > caso 3: chi chiama si chiama in mano e vince:
-                        - il giocatore che chiama  +4 punti 
-                        - chi non viene chiamato -1 punto 
-
-                    > caso 4: chi chiama si chiama in mano e perde:
-                        - il giocatore che chiama  -4 punti 
-                        - chi non viene chiamato +1 punto
-
-                8. Il sistema terrà traccia delle vittorie e delle sconfitte dei giocatori per calcolare una classifica generale.`
+                content: instructionMessage
             },
             {
                 role: "user",
-                content: `L'ID di questa chat è ${chatID} ` //e questa è la lista degli utenti e dei games: ${JSON.stringify(loadData().find(chat => chat.chatID == chatID))}
+                content: `L'ID di questa chat è ${chatID} `
             }
         ]
     
         const finalMessage = await completionWithFunctions({openai, messages, model:`gpt-3.5-turbo`, prompt:cleanMessage, functions})
-        ctx.reply(finalMessage) 
+        await ctx.reply(finalMessage) 
     }
 })
 
-
 /* ===================== LAUNCH ===================== */
-
 
 bot.launch(() => {
     console.log('Bot is up and running')
