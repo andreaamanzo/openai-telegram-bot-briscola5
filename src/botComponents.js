@@ -69,13 +69,13 @@ const addalias = (alias, newAlias, chatID) => {
     }
     alias = parseAlias(alias)
     if (!checkAlias(alias, chatID)) {
-        obj.errMessage = `"${alias}" non è l'alias di nessun utente 
-Utilizza il comando /createuser per creare un nuovo utente oppure /addalias per aggiungere un nuovo alias a un utente`
+        obj.errMessage = `"${alias}" non è l'alias di nessun utente. 
+Utilizza il comando /createuser per creare un nuovo utente, oppure /addalias per aggiungere un nuovo alias a un utente`
         return obj
     }
     newAlias = parseAlias(newAlias)
     if (checkAlias(newAlias, chatID)) {
-        obj.errMessage = `Impossibile assegnare "${newAlias}" come nuovo alias perché è già l'alias di qualcun altro
+        obj.errMessage = `Impossibile assegnare "${newAlias}" come nuovo alias perché è già l'alias di qualcun altro.
 Utilizza il comando /whoisalias per vedere a chi appartiene un certo alias`
         return obj
     } 
@@ -233,7 +233,7 @@ const undo = (chatID) => {
 }
 
 const ranking = (chatID) => {
-    const obj = {validation : false, rankingList : null, errMessage : null}
+    const obj = {validation : false, ranking : null, errMessage : null}
     const rankingList = getRanking(chatID)
 
     if (rankingList.length === 0) {
@@ -279,13 +279,16 @@ const head2head = (alias1, alias2, chatID) => {
             gamesCounter++
         }
     }) 
+    console.log(points1, points2)
+    if (points2 > points1) {
+        [alias1, alias2] = [alias2, alias1]
+    }
     if (points2 > points1) {
         [points1, points2] = [points2, points1]
-        [alias1, alias2] = [alias2, alias1]
     }
 
     if (gamesCounter === 0) {
-        obj.errMessage = `"${alias1}" e ${alias2} non hanno mai giocato nella stessa partita`
+        obj.errMessage = `"${alias1}" e "${alias2}" non hanno mai giocato nella stessa partita`
         return obj
     }
 

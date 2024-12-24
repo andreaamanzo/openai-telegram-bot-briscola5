@@ -8,22 +8,24 @@ const { addalias,
     whoisalias,
     pointsof,
     head2head,
-    undo
+    undo,
+    gamelog
   } = require("./botComponents")
 
 const instructionMessage = `
     Sei un assistente che dovrà chiamare le funzioni necessarie a svolgere tutte le richieste di un utente, 
     le quali possono essere anche più di una in un solo messaggio, ma non dovrai risponderea a richieste extra, 
-    non esplicitamente descritte nel messaggio dell'utente, soprattutto non creare nuovi utenti se non espressamente indicato.
+    non esplicitamente descritte nel messaggio dell'utente, soprattutto non creare nuovi utenti e non mostrare la classifica se non espressamente indicato.
     Ciò che dovrai gestire sarà una chat in cui degli utenti si possono registrare (e ognuno di loro potrà essere conosciuto con più alias) e 
-    registreranno qua le loro partite di "Briscola 5".
+    registreranno qua le loro partite di "Briscola 5". Ogni partita darà un punteggio parziale agli utenti che hanno giocato, che andrà poi a sommarsi
+    con quelli delle altre partite per creare una classifica generale.
     Quando registri una partita NON devi mai creare nuovi utenti.
     "Briscola 5" è un gioco di carte che si gioca in 5 e le cui regole sono:
     1. Si gioca con un mazzo italiano di 40 carte.
     2. Si gioca sempre in 5.
-    3. Prima dell'inizio della partita un giocatore "chiama" un altro giocatore e questi due saranno in squadra insieme (ad esempio "A" ha chiamato "B").
+    3. Prima dell'inizio della partita un giocatore "chiama" un altro giocatore e questi due saranno in squadra insieme (ad esempio "A" ha chiamato "B") e se vincono, vincono entrambi.
     4. Il giocatore che "chiama" potrebbe anche decidere di "chiamarsi in mano", ovvero di chiamare sè stesso: se questo succede il giocatore giocherà da solo contro gli altri quattro giocatori.
-    6. Al termine della partita, una squadrà avrà vinto e una squadra avrà perso.
+    6. Al termine della partita, una squadrà avrà vinto e una squadra avrà perso. Chi vince avrà un punteggio positivo, chi perde negativo.
     7. Le regole per l'assegnazione dei punti a fine partita sono le seguenti (a seconda dei casi che si possono presentare):
         > caso 1: chi chiama vince:
             - il giocatore che chiama  +2 punti 
@@ -136,6 +138,29 @@ const completionWithFunctions = async (options) => {
     }
 }
 
+const audioTranscribe = async (openai, messageAudio, ctx) => {
+    try {
+        const fileLink = await ctx.telegram.getFileLink(messageAudio.file_id)
+
+        const response = await fetch(fileLink.href)
+
+        const transcription = await openai.audio.transcriptions.create({
+            file: response,
+            model: "whisper-1",
+          })
+
+        if (!transcription || !transcription.text) {
+            throw new Error("Errore nella trascrizione: risultato vuoto o nullo")
+        }
+
+        return transcription.text
+
+    } catch (error) {
+        throw error
+    }
+}
+
+ 
 const functions = [
     {
         definition: {
@@ -416,11 +441,32 @@ const functions = [
             const undoObj = undo(chatID)
             return undoObj
         }
+    },
+    {
+        definition: {
+            name: "gamelog",
+            description: "Restituisce l'elenco delle partite giocate di una chat specifica o un messaggio di errore.",
+            parameters: {
+                type: "object",
+                properties: {
+                    chatID: {
+                        type: "number",
+                        description: "ID della chat da cui recuperare l'elenco delle partite."
+                    }
+                }
+            }
+        },
+        handler: (options) => {
+            const { chatID } = options
+            const gamelogObj = gamelog(chatID)
+            return gamelogObj
+        }
     }
 ]
 
 module.exports = {
     functions,
+    audioTranscribe,
     completionWithFunctions,
     instructionMessage
 }

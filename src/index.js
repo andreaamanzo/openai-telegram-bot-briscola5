@@ -1,8 +1,8 @@
 const OpenAI = require("openai")
 const configs = require("./configs")
 const { Telegraf, Markup } = require("telegraf")
-const { helpMessage, truncateAlias, checkChat } = require("./components")
-const { completionWithFunctions, functions, instructionMessage } = require("./functions")
+const { helpMessage, checkChat } = require("./components")
+const { completionWithFunctions, functions, instructionMessage, audioTranscribe } = require("./functions")
 const { addalias,
         createchat,
         createuser,
@@ -167,26 +167,10 @@ bot.command('ranking', async (ctx) => {
     if (!rankingObj.validation) {
         await ctx.reply(rankingObj.errMessage)
         return
-    }
-    const rankingList = rankingObj.ranking
-    const RANK_LENGTH = 4
-    const ALIAS_LENGTH = 10 
-    const POINTS_LENGTH = 5
-    
-    let rankingString = ""
-    rankingString += `Rank | ${'Alias'.padEnd(ALIAS_LENGTH)} | Punti\n`
-    rankingString += `${'-'.repeat(RANK_LENGTH)} | ${'-'.repeat(ALIAS_LENGTH)} | ${'-'.repeat(POINTS_LENGTH)}\n`
-
-    rankingList.forEach((entry, index) => {
-        const position = `${index + 1}°`.padEnd(RANK_LENGTH)
-        const alias = truncateAlias(entry[0], ALIAS_LENGTH).padEnd(ALIAS_LENGTH)
-        const points = entry[1].toString().padEnd(POINTS_LENGTH)
-        rankingString += `${position} | ${alias} | ${points}\n`
-    })
-
-    rankingString = `\`\`\`\n${rankingString}\n\`\`\``
-    await ctx.reply('*Classifica attuale:*', { parse_mode: 'MarkdownV2' })
-    await ctx.reply(rankingString, { parse_mode: 'MarkdownV2' })
+    } else {
+        const options = rankingObj.ranking
+        await sendPaginatedList(ctx, options, 15, 1, 'ranking')
+    }    
 })
 
 bot.command('whoisalias', async (ctx) => {
@@ -259,6 +243,9 @@ bot.action(/PAGE_(\w+)_(\d+)/, async (ctx) => {
     } else if (type === 'users') {
         options = users(chatID).users
         itemsPerPage = 10
+    } else if (type === 'ranking') {
+        options = ranking(chatID).ranking
+        itemsPerPage = 15
     } else {
         await ctx.answerCbQuery('Opzioni non valide!')
         return
@@ -271,24 +258,56 @@ bot.action(/PAGE_(\w+)_(\d+)/, async (ctx) => {
 bot.use(async (ctx) => {
     const botUsername = ctx.botInfo.username
     const messageText = ctx.message.text
+    const messageAudio = ctx.message?.voice || ctx.message?.audio
     const chatID = ctx.chat.id
-
-    if (messageText.includes(`@${botUsername}`) || chatID > 0) { // nelle chat di gruppo il chatID è negativo
-        let cleanMessage = messageText.replace(`@${botUsername}`, '').trim()
-        let messages = [
-            { 
-                role: "system",
-                content: instructionMessage
-            },
-            {
-                role: "user",
-                content: `L'ID di questa chat è ${chatID} `
-            }
-        ]
-    
-        const finalMessage = await completionWithFunctions({openai, messages, model:`gpt-3.5-turbo`, prompt:cleanMessage, functions})
-        await ctx.reply(finalMessage) 
+    let waitingMessage
+    if (!messageAudio || !((messageText ? messageText.includes(`@${botUsername}`) : false)|| chatID > 0)) {
+        return
+    } else {
+        waitingMessage = await ctx.reply('Risposta in elaborazione...')
     }
+    let cleanMessage = null
+    let messages = [
+        { 
+            role: "system",
+            content: instructionMessage
+        },
+        {
+            role: "user",
+            content: `L'ID di questa chat è ${chatID} `
+        }
+    ]
+
+    if (messageAudio) {
+        try {
+            const transcription = await audioTranscribe(openai, messageAudio, ctx)
+            cleanMessage = transcription.toLowerCase()
+            console.log(cleanMessage)
+            messages.push({
+                role: "user",
+                content: `Trascrizione dell'audio: ${cleanMessage}`
+            })
+        } catch (error) {
+            console.error(error)
+            await ctx.reply("Non sono riuscito a elaborare il tuo audio. Riprova!")
+            return
+        }
+        
+    } else if (messageText.includes(`@${botUsername}`) || chatID > 0) { // nelle chat di gruppo il chatID è negativo
+        cleanMessage = messageText.replace(`@${botUsername}`, '').trim()
+    }
+        
+
+    const finalMessage = await completionWithFunctions({
+        openai,
+        messages,
+        model: `gpt-3.5-turbo`,
+        prompt: cleanMessage,
+        functions
+    })
+    await ctx.deleteMessage(waitingMessage.message_id)
+    await ctx.reply(finalMessage)
+
 })
 
 /* ===================== LAUNCH ===================== */

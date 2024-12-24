@@ -74,6 +74,8 @@ const validateGame = (winners, loosers, chatID) => {
         validationObj.errMessage = "Partita inserita in modo non valido"
         return validationObj
     }
+    winners = winners.map(alias => parseAlias(alias))
+    loosers = loosers.map(alias => parseAlias(alias))
     
     const userIDs = new Set() // Per verificare duplicati
     for (let alias of winners.concat(loosers)) {
