@@ -76,9 +76,6 @@ const completionWithFunctions = async (options) => {
 
     let firstMessage = firstCompletion.choices[0].message
     let { tool_calls } = firstMessage
-    console.log('----------tool calls----------------')
-    console.log(tool_calls)
-    console.log('------------------------------------')
 
     messages.push(firstMessage)
 
@@ -100,9 +97,6 @@ const completionWithFunctions = async (options) => {
     
                 // Handle each call and continue processing the rest
                 const result = functionHandler(functionArguments)
-                console.log('----------result----------------')
-                console.log(result)
-                console.log('------------------------------------')
     
                 // Add the result to the list of messages
                 messages.push({
@@ -110,7 +104,6 @@ const completionWithFunctions = async (options) => {
                     tool_call_id: toolCall.id,
                     content: JSON.stringify(result)
                 })
-    
             }
     
             // next response
@@ -123,10 +116,6 @@ const completionWithFunctions = async (options) => {
             secondMessage = secondCompletion.choices[0].message
 
             tool_calls = secondMessage.tool_calls
-
-            console.log('----------tool calls----------------')
-            console.log(tool_calls)
-            console.log('------------------------------------')
     
             messages.push(secondMessage)
     

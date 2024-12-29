@@ -220,7 +220,6 @@ const removegame = (winners, loosers, chatID) => {
 const undo = (chatID) => {
     const obj = {validation : false, game : null, errMessage : null}
     let games = getChatData(chatID).games
-    console.log(games)
     if (games.length == 0) {
         obj.errMessage = 'Nessuna partita presente. Usa il comando /game per registrare una partita'
         return obj
@@ -279,7 +278,6 @@ const head2head = (alias1, alias2, chatID) => {
             gamesCounter++
         }
     }) 
-    console.log(points1, points2)
     if (points2 > points1) {
         [alias1, alias2] = [alias2, alias1]
     }

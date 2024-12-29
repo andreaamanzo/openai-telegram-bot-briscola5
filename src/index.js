@@ -158,7 +158,7 @@ bot.action('CONFIRM_UNDO', async (ctx) => {
 bot.action('CANCEL_UNDO', async (ctx) => {
     await ctx.deleteMessage()
     await ctx.answerCbQuery()
-    await ctx.reply('Operazione annullata.')
+    await ctx.reply('Operazione annullata')
 })
 
 bot.command('ranking', async (ctx) => {
@@ -261,12 +261,27 @@ bot.use(async (ctx) => {
     const messageAudio = ctx.message?.voice || ctx.message?.audio
     const chatID = ctx.chat.id
     let waitingMessage
-    if (!messageAudio || !((messageText ? messageText.includes(`@${botUsername}`) : false)|| chatID > 0)) {
-        return
-    } else {
-        waitingMessage = await ctx.reply('Risposta in elaborazione...')
-    }
     let cleanMessage = null
+    
+    if (messageAudio) {
+        waitingMessage = await ctx.reply(`Elaborazione dell'audio ...`)
+        try {
+            const transcription = await audioTranscribe(openai, messageAudio, ctx)
+            cleanMessage = transcription.toLowerCase()
+        } catch (error) {
+            console.error(error)
+            await ctx.reply("Non sono riuscito a elaborare il tuo audio. Riprova!")
+            return
+        } finally {
+            await ctx.deleteMessage(waitingMessage.message_id)
+        }
+        
+    } else if (messageText.includes(`@${botUsername}`) || chatID > 0) {
+        cleanMessage = messageText.replace(`@${botUsername}`, '').trim()
+    } else {
+        return
+    }
+
     let messages = [
         { 
             role: "system",
@@ -278,26 +293,8 @@ bot.use(async (ctx) => {
         }
     ]
 
-    if (messageAudio) {
-        try {
-            const transcription = await audioTranscribe(openai, messageAudio, ctx)
-            cleanMessage = transcription.toLowerCase()
-            console.log(cleanMessage)
-            messages.push({
-                role: "user",
-                content: `Trascrizione dell'audio: ${cleanMessage}`
-            })
-        } catch (error) {
-            console.error(error)
-            await ctx.reply("Non sono riuscito a elaborare il tuo audio. Riprova!")
-            return
-        }
-        
-    } else if (messageText.includes(`@${botUsername}`) || chatID > 0) { // nelle chat di gruppo il chatID è negativo
-        cleanMessage = messageText.replace(`@${botUsername}`, '').trim()
-    }
-        
-
+    waitingMessage = await ctx.reply(`Elaborazione della risposta...`)
+    
     const finalMessage = await completionWithFunctions({
         openai,
         messages,
@@ -305,6 +302,7 @@ bot.use(async (ctx) => {
         prompt: cleanMessage,
         functions
     })
+
     await ctx.deleteMessage(waitingMessage.message_id)
     await ctx.reply(finalMessage)
 
