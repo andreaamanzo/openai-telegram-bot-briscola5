@@ -49,6 +49,9 @@ To set up and run the bot, follow these steps:
     ```env
     OPENAI_API_KEY='your_openai_api_key_here'
     TELEGRAM_BOT_TOKEN='your_telegram_bot_token_here'
+
+    # List of authorized group IDs, comma separated
+    ALLOWED_GROUP_IDS=
     ```  
 
 6. Start the bot by running the following command:
