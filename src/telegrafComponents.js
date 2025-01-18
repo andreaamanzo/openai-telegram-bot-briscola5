@@ -98,7 +98,6 @@ const sendPaginatedList = async (ctx, options, itemsPerPage, currentPage, type) 
 }
 
 
-
 module.exports = {
     sendPaginatedList
 }

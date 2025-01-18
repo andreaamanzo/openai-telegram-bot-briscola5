@@ -22,11 +22,24 @@ const { sendPaginatedList } = require('./telegrafComponents')
 /* ===================== SETUP ===================== */
 
 const bot = new Telegraf(configs.TELEGRAM_BOT_TOKEN)
+const allowedGroupIDs = process.env.ALLOWED_GROUP_IDS.split(',').map(id => parseInt(id))
 const openai = new OpenAI({
     apiKey: configs.OPENAI_API_KEY
 })
 
 /* ===================== BOT ===================== */
+
+bot.on('my_chat_member', async (ctx) => {
+    const chatID = ctx.chat.id
+    const newStatus = ctx.update.my_chat_member.new_chat_member.status
+
+    if (newStatus === 'member') { 
+        if (!allowedGroupIDs.includes(chatID)) {
+            console.log(`Gruppo non autorizzato: ${ctx.chat.title} (ID: ${chatID})`)
+            await ctx.telegram.leaveChat(chatID)
+        }
+    }
+})
 
 bot.start(async (ctx) => {
     const chatID = ctx.chat.id
@@ -40,13 +53,22 @@ bot.start(async (ctx) => {
 
 bot.use(async (ctx, next) => {
     const chatID = ctx.chat.id
+    const chatMember = await ctx.telegram.getChatMember(chatID, ctx.botInfo.id)
+
+    if (chatMember.status === 'left' || chatMember.status === 'kicked') {
+        return
+    }
+
     const validation = checkChat(chatID)
+
     if (validation) {
         return next()
     } else {
         await ctx.reply("È necessario avviare il bot con il comando /start prima di poterlo usare")
     }
 })
+
+
 
 bot.command('createuser', async (ctx) => {
     const chatID = ctx.chat.id
